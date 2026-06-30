@@ -173,7 +173,7 @@ export default function Navbar() {
           )}
 
           {/* ─── RIGHT ACTIONS (home page only) ──────────── */}
-          {isHome && (<div className="flex items-center gap-1.5 flex-shrink-0">)}
+          {isHome && <div className="flex items-center gap-1.5 flex-shrink-0">
 
             {/* Notifications — desktop only */}
             <motion.button

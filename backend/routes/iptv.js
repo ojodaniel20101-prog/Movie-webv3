@@ -26,6 +26,17 @@ const fs        = require('fs');
 const path      = require('path');
 const http      = require('http');
 const https     = require('https');
+
+// ── Residential proxy support (set PROXY_URL env var to enable) ──────────────
+const PROXY_URL = process.env.PROXY_URL || null;
+function getProxyAgent(targetProtocol) {
+  if (!PROXY_URL) return undefined;
+  try {
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    const { HttpProxyAgent  } = require('http-proxy-agent');
+    return targetProtocol === 'https:' ? new HttpsProxyAgent(PROXY_URL) : new HttpProxyAgent(PROXY_URL);
+  } catch { return undefined; }
+}
 const { URL }   = require('url');
 const rateLimit = require('express-rate-limit');
 
@@ -257,6 +268,7 @@ function proxyReq(targetUrl, extraHeaders = {}, method = 'GET') {
     let parsed;
     try { parsed = new URL(targetUrl); } catch (e) { return reject(e); }
     const mod  = parsed.protocol === 'https:' ? https : http;
+    const proxyAgent = getProxyAgent(parsed.protocol);
     const opts = {
       hostname: parsed.hostname,
       port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
@@ -264,7 +276,7 @@ function proxyReq(targetUrl, extraHeaders = {}, method = 'GET') {
       method,
       headers:  { 'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36', 'Accept': '*/*', ...extraHeaders },
       timeout:  15000,
-      agent:    getAgent(parsed.protocol),
+      agent:    proxyAgent || getAgent(parsed.protocol),
     };
     const req = mod.request(opts, (res) => resolve(res));
     req.on('error', reject);
