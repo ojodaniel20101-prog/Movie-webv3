@@ -74,7 +74,7 @@ function TeamLogo({ src, name }: { src?: string; name: string }) {
 }
 
 // ─── Match Card ──────────────────────────────────────────────────────────────
-function MatchCard({ match, onPlay }: { match: Match; onPlay: (match: Match) => void }) {
+function MatchCard({ match, onPlay, source }: { match: Match; onPlay: (match: Match) => void; source: 'local' | 'english' }) {
   const canPlay = match.status === 'LIVE' && match.streams.length > 0;
 
   return (
@@ -354,11 +354,16 @@ export default function SportsPage() {
   const [activeMatch, setActiveMatch] = useState<Match | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const [source, setSource] = useState<'local' | 'english'>('local');
+
   const fetchMatches = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/sports/matches?sport=${sport}`);
+      const endpoint = source === 'english'
+        ? `${API_BASE}/api/embedhd/matches`
+        : `${API_BASE}/api/sports/matches?sport=${sport}`;
+      const res = await fetch(endpoint);
       if (!res.ok) throw new Error('Failed to fetch matches');
       const data = await res.json();
       setMatches(data.matches || []);
@@ -368,7 +373,7 @@ export default function SportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [sport]);
+  }, [sport, source]);
 
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
   useEffect(() => {
@@ -412,6 +417,26 @@ export default function SportsPage() {
             Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
         )}
+      </div>
+
+      {/* Source toggle */}
+      <div className="flex gap-2 px-4 mb-3">
+        <button onClick={() => setSource('local')}
+          className="flex-shrink-0 px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+          style={source === 'local' ? {
+            background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+            border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
+          } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#8899AA' }}>
+          🌍 All Sports
+        </button>
+        <button onClick={() => setSource('english')}
+          className="flex-shrink-0 px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+          style={source === 'english' ? {
+            background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+            border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
+          } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#8899AA' }}>
+          🏴󠁧󠁢󠁥󠁮󠁧󠁿 English Streams
+        </button>
       </div>
 
       {/* Sport tabs */}
@@ -473,7 +498,7 @@ export default function SportsPage() {
                 <h2 className="text-sm font-black text-white">Live Now</h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
-                {live.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} />)}
+                {live.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} source={source} />)}
               </div>
             </section>
           )}
@@ -484,7 +509,7 @@ export default function SportsPage() {
                 <h2 className="text-sm font-black text-white">Upcoming</h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
-                {upcoming.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} />)}
+                {upcoming.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} source={source} />)}
               </div>
             </section>
           )}
@@ -495,7 +520,7 @@ export default function SportsPage() {
                 <h2 className="text-sm font-black text-white">Finished</h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
-                {finished.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} />)}
+                {finished.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} source={source} />)}
               </div>
             </section>
           )}
