@@ -92,8 +92,8 @@ export default function Navbar() {
       <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="flex items-center gap-3 h-16">
 
-          {/* ─── LOGO ──────────────────────────────────────── */}
-          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+          {/* ─── LOGO (home page only) ───────────────────── */}
+          {isHome && <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
             <div className="relative w-9 h-9">
               <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 transition-transform duration-300 group-hover:scale-110">
                 <defs>
@@ -111,7 +111,7 @@ export default function Navbar() {
               <span className="text-white">Zen</span>
               <span className="text-gradient">trix</span>
             </span>
-          </Link>
+          </Link>}
 
           {/* ─── DESKTOP NAV ───────────────────────────────── */}
           <div className="hidden md:flex items-center gap-0.5 flex-1">
@@ -172,8 +172,8 @@ export default function Navbar() {
             <div className="flex-1" />
           )}
 
-          {/* ─── RIGHT ACTIONS ─────────────────────────────── */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* ─── RIGHT ACTIONS (home page only) ──────────── */}
+          {isHome && <div className="flex items-center gap-1.5 flex-shrink-0">}
 
             {/* Notifications — desktop only */}
             <motion.button
@@ -296,7 +296,7 @@ export default function Navbar() {
                 <User size={18} />
               </Link>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
