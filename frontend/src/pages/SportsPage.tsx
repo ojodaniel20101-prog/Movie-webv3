@@ -366,7 +366,23 @@ export default function SportsPage() {
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error('Failed to fetch matches');
       const data = await res.json();
-      setMatches(data.matches || []);
+      // Normalize embedhd data shape to match local format
+      const raw = data.matches || [];
+      const normalized = source === 'english' ? raw.map((m: any) => ({
+        id:        String(m.id),
+        homeTeam:  m.home || m.homeTeam || 'Home',
+        awayTeam:  m.away || m.awayTeam || 'Away',
+        homeLogo:  m.homeLogo || '',
+        awayLogo:  m.awayLogo || '',
+        homeScore: m.homeScore || '-',
+        awayScore: m.awayScore || '-',
+        status:    m.status || 'UNKNOWN',
+        streams:   m.streams || [],
+        startTime: m.time ? new Date(m.time).getTime() / 1000 : null,
+        league:    m.league || null,
+        m3u8Url:   null,
+      })) : raw;
+      setMatches(normalized);
       setLastUpdated(new Date());
     } catch (e: any) {
       setError(e.message);
