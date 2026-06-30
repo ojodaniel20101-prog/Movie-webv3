@@ -88,6 +88,41 @@ if (fs.existsSync(distPath)) {
     }
   });
 } else {
+  // No built frontend — serve a minimal stream-test page at /test
+  app.get('/test', (_req, res) => {
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Stream Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.16"></script>
+    <style>body{background:#0a0a16;color:#fff;font-family:system-ui;padding:20px}
+    .ch{margin:10px 0;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px}
+    video{width:320px;height:180px;background:#000;border-radius:8px}
+    .st{display:inline-block;padding:4px 12px;border-radius:4px;font-size:12px;margin-left:10px}
+    .st.ld{background:#f59e0b;color:#000}.st.ok{background:#10b981}.st.er{background:#ef4444}</style>
+    </head><body><h1>Kids Channel Stream Test</h1><div id="c"></div>
+    <script>
+    const ch=[
+      {n:'Cartoon Network',u:'/api/iptv/proxy?url='+encodeURIComponent('http://23.237.104.106:8080/USA_CARTOON_NETWORK/index.m3u8')},
+      {n:'Nickelodeon',u:'/api/iptv/proxy?url='+encodeURIComponent('http://23.237.104.106:8080/USA_NICKELODEON/index.m3u8')},
+      {n:'Disney Junior',u:'/api/iptv/proxy?url='+encodeURIComponent('http://23.237.104.106:8080/USA_DISNEY_JUNIOR/index.m3u8')},
+      {n:'PBS Kids',u:'/api/iptv/proxy?url='+encodeURIComponent('https://livestream.pbskids.org/out/v1/14507d931bbe48a69287e4850e53443c/est.m3u8')},
+      {n:'Boomerang',u:'/api/iptv/proxy?url='+encodeURIComponent('http://23.237.104.106:8080/USA_BOOMERANG/index.m3u8')}
+    ];
+    const d=document.getElementById('c');
+    ch.forEach((c,i)=>{
+      const x=document.createElement('div');x.className='ch';
+      x.innerHTML='<h3>'+c.n+' <span id=s'+i+' class="st ld">Loading...</span></h3><video id=v'+i+' controls muted playsinline></video>';
+      d.appendChild(x);
+      const v=document.getElementById('v'+i),s=document.getElementById('s'+i);
+      if(Hls.isSupported()){
+        const h=new Hls({enableWorker:true,maxBufferLength:30,manifestLoadingTimeOut:20000,fragLoadingTimeOut:20000});
+        h.loadSource(c.u);h.attachMedia(v);
+        h.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));
+        v.addEventListener('playing',()=>{s.textContent='Playing!';s.className='st ok';});
+        h.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){s.textContent='Err:'+d.type;s.className='st er';console.error(c.n,d);}});
+      }else if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=c.u;v.play().catch(()=>{});v.addEventListener('playing',()=>{s.textContent='Playing!';s.className='st ok';});}
+    });
+    </script></body></html>`);
+  });
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 }
 
