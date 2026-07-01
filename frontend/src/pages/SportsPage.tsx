@@ -24,6 +24,11 @@ interface Stream {
   ms?: number;
 }
 
+interface EmbedhdStream {
+  hd: number;
+  link: string;
+}
+
 interface Match {
   id: string;
   homeTeam: string;
@@ -34,6 +39,7 @@ interface Match {
   awayScore: string;
   status: 'LIVE' | 'UPCOMING' | 'FINISHED' | string;
   streams: Stream[];
+  embedhdStreams?: EmbedhdStream[];
   startTime: number | null;
   league: string | null;
 }
@@ -75,7 +81,7 @@ function TeamLogo({ src, name }: { src?: string; name: string }) {
 
 // ─── Match Card ──────────────────────────────────────────────────────────────
 function MatchCard({ match, onPlay, source }: { match: Match; onPlay: (match: Match) => void; source: 'local' | 'english' }) {
-  const canPlay = match.status === 'LIVE' && match.streams.length > 0;
+  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
 
   return (
     <motion.div
@@ -146,8 +152,8 @@ function MatchCard({ match, onPlay, source }: { match: Match; onPlay: (match: Ma
   );
 }
 
-// ─── Sports Player ────────────────────────────────────────────────────────────
-function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
+// ─── Local Sports Player (sportslivetoday source) ────────────────────────────
+function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
@@ -176,12 +182,10 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
       .then(data => {
         const sorted: Stream[] = data.streams || match.streams;
         setRankedStreams(sorted);
-        // Auto-play the fastest working one
         const best = sorted.find(s => s.ok !== false) || sorted[0];
         setActiveStream(best);
       })
       .catch(() => {
-        // Fallback: just use as-is
         setRankedStreams(match.streams);
         setActiveStream(match.streams[0]);
       })
@@ -198,7 +202,6 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
     const proxyUrl = `${API_BASE}/api/sports/stream-proxy?url=${encodeURIComponent(activeStream.url)}`;
     const video = videoRef.current;
 
-    // Destroy previous HLS instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -240,64 +243,133 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
       className="fixed inset-0 z-50 flex flex-col"
       style={{ background: '#050816' }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div>
-          <p className="text-xs font-black text-white">{match.homeTeam} vs {match.awayTeam}</p>
-          {match.league && <p className="text-[10px]" style={{ color: '#8899AA' }}>{match.league}</p>}
-        </div>
-        <div className="flex items-center gap-3">
-          <StatusBadge status={match.status} />
-          <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none">✕</button>
-        </div>
-      </div>
+      <PlayerHeader match={match} onClose={onClose} />
+      <VideoPlayer
+        videoRef={videoRef}
+        testing={testing}
+        loading={loading}
+        error={error}
+        hasStreams={rankedStreams.length > 0}
+      />
+      <PlayerScoreBar match={match} />
+      <ChannelSwitcher
+        streams={rankedStreams}
+        activeStream={activeStream}
+        onSwitch={(s) => switchStream(s)}
+      />
+    </motion.div>
+  );
+}
 
-      {/* Video */}
-      <div className="flex-1 relative flex items-center justify-center bg-black">
-        {(testing || loading) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-2">
-            <Loader2 className="w-8 h-8 animate-spin text-red-500" />
-            <p className="text-xs" style={{ color: '#8899AA' }}>
-              {testing ? 'Finding best stream...' : 'Loading stream...'}
-            </p>
-          </div>
-        )}
-        {error && !loading ? (
-          <div className="text-center px-4">
-            <WifiOff className="w-10 h-10 mx-auto mb-2 text-red-500" />
-            <p className="text-white font-semibold text-sm">{error}</p>
-            <p className="text-xs mt-1 mb-3" style={{ color: '#8899AA' }}>Try a different channel below</p>
-          </div>
-        ) : (
-          <video
-            ref={videoRef}
-            className="w-full h-full"
-            controls
-            playsInline
-            style={{ maxHeight: '100%', opacity: loading || testing ? 0 : 1 }}
-          />
-        )}
-      </div>
+// ─── English Streams Player (embedhd source) ─────────────────────────────────
+function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
 
-      {/* Score bar */}
-      <div className="flex items-center justify-center gap-6 px-4 py-2 flex-shrink-0"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center gap-2">
-          <TeamLogo src={match.homeLogo} name={match.homeTeam} />
-          <span className="text-xs font-bold text-white">{match.homeTeam}</span>
-        </div>
-        <span className="text-xl font-black text-white tabular-nums">
-          {match.homeScore} - {match.awayScore}
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-white">{match.awayTeam}</span>
-          <TeamLogo src={match.awayLogo} name={match.awayTeam} />
-        </div>
-      </div>
+  const [channels, setChannels] = useState<{ hd: number; label: string }[]>([]);
+  const [activeChannel, setActiveChannel] = useState(0);
+  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(true);
 
-      {/* Channel switcher */}
-      {rankedStreams.length > 0 && (
+  // Build channel list from embedhdStreams
+  useEffect(() => {
+    if (match.embedhdStreams && match.embedhdStreams.length > 0) {
+      const chs = match.embedhdStreams.map((s, i) => ({
+        hd: s.hd,
+        label: i === 0 ? 'Primary HD' : `Ch ${i + 1}`,
+      }));
+      setChannels(chs);
+    }
+  }, [match.id]);
+
+  // Resolve m3u8 via backend when channel changes
+  useEffect(() => {
+    if (!match.embedhdStreams || match.embedhdStreams.length === 0) {
+      setResolving(false);
+      setError('No streams available');
+      return;
+    }
+
+    setResolving(true);
+    setError(null);
+    setProxyUrl(null);
+
+    fetch(`${API_BASE}/api/embedhd/stream?id=${match.id}&stream_index=${activeChannel}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.streamUrl) {
+          setProxyUrl(data.streamUrl);
+        } else {
+          setError(data.error || 'Could not resolve stream');
+        }
+      })
+      .catch(() => setError('Failed to resolve stream'))
+      .finally(() => setResolving(false));
+  }, [match.id, activeChannel]);
+
+  // Load video when proxyUrl is ready
+  useEffect(() => {
+    if (!proxyUrl || !videoRef.current) return;
+
+    setLoading(true);
+    setError(null);
+
+    const video = videoRef.current;
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      hlsRef.current = hls;
+      hls.loadSource(proxyUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false);
+        video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) setError('Stream unavailable — try another channel');
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = proxyUrl;
+      video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); });
+      video.addEventListener('error', () => setError('Stream unavailable'));
+    }
+
+    return () => {
+      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    };
+  }, [proxyUrl]);
+
+  const switchChannel = (index: number) => {
+    setActiveChannel(index);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: '#050816' }}
+    >
+      <PlayerHeader match={match} onClose={onClose} />
+      <VideoPlayer
+        videoRef={videoRef}
+        testing={resolving}
+        loading={loading}
+        error={error}
+        hasStreams={channels.length > 0}
+      />
+      <PlayerScoreBar match={match} />
+
+      {/* Embedhd Channel Switcher */}
+      {channels.length > 0 && (
         <div className="flex-shrink-0 px-4 pb-4 pt-2"
           style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <p className="text-[10px] font-semibold mb-2" style={{ color: '#8899AA' }}>
@@ -305,13 +377,12 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
             CHANNELS
           </p>
           <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            {rankedStreams.map((stream, idx) => {
-              const isActive = activeStream?.url === stream.url;
-              const isFastest = idx === 0 && stream.ok !== false;
+            {channels.map((ch, idx) => {
+              const isActive = idx === activeChannel;
               return (
                 <button
-                  key={stream.url}
-                  onClick={() => switchStream(stream)}
+                  key={ch.hd}
+                  onClick={() => switchChannel(idx)}
                   className="flex-shrink-0 flex flex-col items-start px-3 py-2 rounded-xl text-left transition-all"
                   style={isActive ? {
                     background: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.15))',
@@ -324,17 +395,12 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
                   <div className="flex items-center gap-1.5 mb-0.5">
                     {isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
                     <span className="text-xs font-bold" style={{ color: isActive ? '#fff' : '#8899AA' }}>
-                      {idx === 0 ? stream.name : `Ch ${idx + 1}`}
+                      {ch.label}
                     </span>
-                    {isFastest && !isActive && (
-                      <Zap size={9} style={{ color: '#eab308' }} />
-                    )}
                   </div>
-                  {stream.ms && stream.ms < 9999 && (
-                    <span className="text-[9px]" style={{ color: stream.ok ? '#22c55e' : '#ef4444' }}>
-                      {stream.ok ? `${stream.ms}ms` : 'offline'}
-                    </span>
-                  )}
+                  <span className="text-[9px]" style={{ color: '#8899AA' }}>
+                    HD {ch.hd}
+                  </span>
                 </button>
               );
             })}
@@ -345,6 +411,143 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
   );
 }
 
+// ─── Shared Player Components ────────────────────────────────────────────────
+
+function PlayerHeader({ match, onClose }: { match: Match; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+      style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <div>
+        <p className="text-xs font-black text-white">{match.homeTeam} vs {match.awayTeam}</p>
+        {match.league && <p className="text-[10px]" style={{ color: '#8899AA' }}>{match.league}</p>}
+      </div>
+      <div className="flex items-center gap-3">
+        <StatusBadge status={match.status} />
+        <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none">✕</button>
+      </div>
+    </div>
+  );
+}
+
+function VideoPlayer({
+  videoRef,
+  testing,
+  loading,
+  error,
+  hasStreams,
+}: {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  testing: boolean;
+  loading: boolean;
+  error: string | null;
+  hasStreams: boolean;
+}) {
+  return (
+    <div className="flex-1 relative flex items-center justify-center bg-black">
+      {(testing || loading) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-2">
+          <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+          <p className="text-xs" style={{ color: '#8899AA' }}>
+            {testing ? 'Finding best stream...' : 'Loading stream...'}
+          </p>
+        </div>
+      )}
+      {error && !loading ? (
+        <div className="text-center px-4">
+          <WifiOff className="w-10 h-10 mx-auto mb-2 text-red-500" />
+          <p className="text-white font-semibold text-sm">{error}</p>
+          {hasStreams && (
+            <p className="text-xs mt-1 mb-3" style={{ color: '#8899AA' }}>Try a different channel below</p>
+          )}
+        </div>
+      ) : (
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          controls
+          playsInline
+          style={{ maxHeight: '100%', opacity: loading || testing ? 0 : 1 }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PlayerScoreBar({ match }: { match: Match }) {
+  return (
+    <div className="flex items-center justify-center gap-6 px-4 py-2 flex-shrink-0"
+      style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="flex items-center gap-2">
+        <TeamLogo src={match.homeLogo} name={match.homeTeam} />
+        <span className="text-xs font-bold text-white">{match.homeTeam}</span>
+      </div>
+      <span className="text-xl font-black text-white tabular-nums">
+        {match.homeScore} - {match.awayScore}
+      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-white">{match.awayTeam}</span>
+        <TeamLogo src={match.awayLogo} name={match.awayTeam} />
+      </div>
+    </div>
+  );
+}
+
+function ChannelSwitcher({
+  streams,
+  activeStream,
+  onSwitch,
+}: {
+  streams: Stream[];
+  activeStream: Stream | null;
+  onSwitch: (s: Stream) => void;
+}) {
+  if (streams.length === 0) return null;
+  return (
+    <div className="flex-shrink-0 px-4 pb-4 pt-2"
+      style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <p className="text-[10px] font-semibold mb-2" style={{ color: '#8899AA' }}>
+        <Radio size={9} className="inline mr-1" />
+        CHANNELS
+      </p>
+      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {streams.map((stream, idx) => {
+          const isActive = activeStream?.url === stream.url;
+          const isFastest = idx === 0 && stream.ok !== false;
+          return (
+            <button
+              key={stream.url}
+              onClick={() => onSwitch(stream)}
+              className="flex-shrink-0 flex flex-col items-start px-3 py-2 rounded-xl text-left transition-all"
+              style={isActive ? {
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.15))',
+                border: '1px solid rgba(239,68,68,0.5)',
+              } : {
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+                <span className="text-xs font-bold" style={{ color: isActive ? '#fff' : '#8899AA' }}>
+                  {idx === 0 ? stream.name : `Ch ${idx + 1}`}
+                </span>
+                {isFastest && !isActive && (
+                  <Zap size={9} style={{ color: '#eab308' }} />
+                )}
+              </div>
+              {stream.ms && stream.ms < 9999 && (
+                <span className="text-[9px]" style={{ color: stream.ok ? '#22c55e' : '#ef4444' }}>
+                  {stream.ok ? `${stream.ms}ms` : 'offline'}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SportsPage() {
   const [sport, setSport] = useState('football');
@@ -352,6 +555,7 @@ export default function SportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeMatch, setActiveMatch] = useState<Match | null>(null);
+  const [playerSource, setPlayerSource] = useState<'local' | 'english'>('local');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const [source, setSource] = useState<'local' | 'english'>('local');
@@ -360,29 +564,50 @@ export default function SportsPage() {
     setLoading(true);
     setError(null);
     try {
-      const endpoint = source === 'english'
-        ? `${API_BASE}/api/embedhd/matches`
-        : `${API_BASE}/api/sports/matches?sport=${sport}`;
-      const res = await fetch(endpoint);
-      if (!res.ok) throw new Error('Failed to fetch matches');
-      const data = await res.json();
-      // Normalize embedhd data shape to match local format
-      const raw = data.matches || [];
-      const normalized = source === 'english' ? raw.map((m: any) => ({
-        id:        String(m.id),
-        homeTeam:  m.home || m.homeTeam || 'Home',
-        awayTeam:  m.away || m.awayTeam || 'Away',
-        homeLogo:  m.homeLogo || '',
-        awayLogo:  m.awayLogo || '',
-        homeScore: m.homeScore || '-',
-        awayScore: m.awayScore || '-',
-        status:    m.status || 'UNKNOWN',
-        streams:   m.streams || [],
-        startTime: m.time ? new Date(m.time).getTime() / 1000 : null,
-        league:    m.league || null,
-        m3u8Url:   null,
-      })) : raw;
-      setMatches(normalized);
+      if (source === 'english') {
+        // Fetch embedhd matches, filter to football only
+        const res = await fetch(`${API_BASE}/api/embedhd/matches`);
+        if (!res.ok) throw new Error('Failed to fetch matches');
+        const data = await res.json();
+        const raw = data.matches || [];
+        const normalized: Match[] = raw
+          .filter((m: any) => m.category === 'football' || m.category === 'soccer')
+          .map((m: any) => ({
+            id: String(m.id),
+            homeTeam: m.home || m.homeTeam || 'Home',
+            awayTeam: m.away || m.awayTeam || 'Away',
+            homeLogo: m.homeLogo || '',
+            awayLogo: m.awayLogo || '',
+            homeScore: m.homeScore || '-',
+            awayScore: m.awayScore || '-',
+            status: m.status || 'UNKNOWN',
+            streams: [], // embedhd streams are not direct-playable
+            embedhdStreams: m.streams || [], // store the embedhd stream refs {hd, link}
+            startTime: m.time ? new Date(m.time).getTime() / 1000 : null,
+            league: m.league || null,
+          }));
+        setMatches(normalized);
+      } else {
+        // Local sports API
+        const res = await fetch(`${API_BASE}/api/sports/matches?sport=${sport}`);
+        if (!res.ok) throw new Error('Failed to fetch matches');
+        const data = await res.json();
+        const raw = data.matches || [];
+        const normalized: Match[] = raw.map((m: any) => ({
+          id: String(m.id),
+          homeTeam: m.homeTeam || 'Home',
+          awayTeam: m.awayTeam || 'Away',
+          homeLogo: m.homeLogo || '',
+          awayLogo: m.awayLogo || '',
+          homeScore: String(m.homeScore ?? '-'),
+          awayScore: String(m.awayScore ?? '-'),
+          status: m.status || 'UNKNOWN',
+          streams: m.streams || [],
+          startTime: m.startTime || null,
+          league: m.league || null,
+        }));
+        setMatches(normalized);
+      }
       setLastUpdated(new Date());
     } catch (e: any) {
       setError(e.message);
@@ -397,15 +622,23 @@ export default function SportsPage() {
     return () => clearInterval(t);
   }, [fetchMatches]);
 
-  const live     = matches.filter(m => m.status === 'LIVE');
+  const handlePlay = useCallback((match: Match) => {
+    setActiveMatch(match);
+    setPlayerSource(source);
+  }, [source]);
+
+  const live = matches.filter(m => m.status === 'LIVE');
   const upcoming = matches.filter(m => m.status === 'UPCOMING');
-  const finished = matches.filter(m => m.status === 'FINISHED');
+  const finished = matches.filter(m => !['LIVE', 'UPCOMING'].includes(m.status));
 
   return (
     <div className="min-h-screen pb-24" style={{ background: 'var(--bg, #050816)' }}>
       <AnimatePresence>
-        {activeMatch && (
-          <SportsPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
+        {activeMatch && playerSource === 'local' && (
+          <LocalSportsPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
+        )}
+        {activeMatch && playerSource === 'english' && (
+          <EmbedhdPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
         )}
       </AnimatePresence>
 
@@ -455,27 +688,41 @@ export default function SportsPage() {
         </button>
       </div>
 
-      {/* Sport tabs */}
-      <div className="flex gap-2 px-4 mb-5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-        {SPORTS.map(s => (
-          <button
-            key={s.key}
-            onClick={() => setSport(s.key)}
-            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all"
-            style={sport === s.key ? {
-              background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
-              border: '1px solid rgba(0,212,255,0.4)',
-              color: '#00D4FF',
-            } : {
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: '#8899AA',
-            }}
-          >
-            <span>{s.icon}</span> {s.label}
-          </button>
-        ))}
-      </div>
+      {/* Sport tabs — only show for local source */}
+      {source === 'local' && (
+        <div className="flex gap-2 px-4 mb-5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          {SPORTS.map(s => (
+            <button
+              key={s.key}
+              onClick={() => setSport(s.key)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+              style={sport === s.key ? {
+                background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+                border: '1px solid rgba(0,212,255,0.4)',
+                color: '#00D4FF',
+              } : {
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#8899AA',
+              }}
+            >
+              <span>{s.icon}</span> {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* English streams info bar */}
+      {source === 'english' && (
+        <div className="px-4 mb-4">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+            style={{ background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.2)' }}>
+            <span className="text-xs" style={{ color: '#00D4FF' }}>
+              ⚽ Showing football matches only — powered by embedhd.org
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
@@ -502,7 +749,9 @@ export default function SportsPage() {
           <div className="text-center">
             <Trophy className="w-10 h-10 mx-auto mb-3" style={{ color: '#8899AA' }} />
             <p className="text-white font-semibold mb-1">No matches found</p>
-            <p className="text-sm" style={{ color: '#8899AA' }}>Check back when games are scheduled</p>
+            <p className="text-sm" style={{ color: '#8899AA' }}>
+              {source === 'english' ? 'No football matches available right now' : 'Check back when games are scheduled'}
+            </p>
           </div>
         </div>
       ) : (
@@ -514,7 +763,7 @@ export default function SportsPage() {
                 <h2 className="text-sm font-black text-white">Live Now</h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
-                {live.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} source={source} />)}
+                {live.map(m => <MatchCard key={m.id} match={m} onPlay={handlePlay} source={source} />)}
               </div>
             </section>
           )}
@@ -525,7 +774,7 @@ export default function SportsPage() {
                 <h2 className="text-sm font-black text-white">Upcoming</h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
-                {upcoming.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} source={source} />)}
+                {upcoming.map(m => <MatchCard key={m.id} match={m} onPlay={handlePlay} source={source} />)}
               </div>
             </section>
           )}
@@ -536,7 +785,7 @@ export default function SportsPage() {
                 <h2 className="text-sm font-black text-white">Finished</h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
-                {finished.map(m => <MatchCard key={m.id} match={m} onPlay={setActiveMatch} source={source} />)}
+                {finished.map(m => <MatchCard key={m.id} match={m} onPlay={handlePlay} source={source} />)}
               </div>
             </section>
           )}
