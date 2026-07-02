@@ -463,7 +463,7 @@ function VideoPlayer({
       ) : (
         <video
           ref={videoRef}
-          className="w-full h-full"
+          className="w-full aspect-video"
           controls
           playsInline
           style={{ maxHeight: '100%', opacity: loading || testing ? 0 : 1 }}
