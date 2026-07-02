@@ -463,7 +463,7 @@ function VideoPlayer({
       ) : (
         <video
           ref={videoRef}
-          className="w-full aspect-video"
+          className="w-full h-64"
           controls
           playsInline
           style={{ maxHeight: '100%', opacity: loading || testing ? 0 : 1 }}
@@ -632,7 +632,7 @@ export default function SportsPage() {
   const finished = matches.filter(m => !['LIVE', 'UPCOMING'].includes(m.status));
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: 'var(--bg, #050816)' }}>
+    <div className="min-h-screen pb-24 max-w-2xl mx-auto" style={{ background: 'var(--bg, #050816)' }}>
       <AnimatePresence>
         {activeMatch && playerSource === 'local' && (
           <LocalSportsPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
