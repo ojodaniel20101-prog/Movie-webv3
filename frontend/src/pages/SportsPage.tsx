@@ -241,7 +241,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex flex-col bg-black/40 overflow-y-auto"
-      style={{ background: '#050816' }}
+      
     >
       <PlayerHeader match={match} onClose={onClose} />
       <VideoPlayer
@@ -356,7 +356,7 @@ function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex flex-col bg-black/40 overflow-y-auto"
-      style={{ background: '#050816' }}
+      
     >
       <PlayerHeader match={match} onClose={onClose} />
       <VideoPlayer
