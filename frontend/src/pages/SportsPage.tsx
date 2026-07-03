@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Wifi, WifiOff, RefreshCw, Play, Clock,
-  CheckCircle2, Loader2, Radio, ChevronRight, Zap,
+  CheckCircle2, Loader2,
   TrendingUp, Calendar, Shield, Swords, Target,
-  Activity, X, Volume2, VolumeX, Maximize, Minimize,
-  Star, AlertCircle, ChevronDown, ChevronUp, BarChart3,
-  Users, Timer, Flag
+  Activity, X, Maximize, Minimize,
+  Star, AlertCircle, ChevronDown, BarChart3,
+  Users, Timer, Flag, Smartphone, Monitor, AlertTriangle
 } from 'lucide-react';
 import Hls from 'hls.js';
 
@@ -709,6 +709,338 @@ function SkeletonHero() {
   );
 }
 
+// ─── Shared: StreamSelector ──────────────────────────────────────────────────
+function StreamSelector({
+  streams,
+  activeIndex,
+  onSelect,
+}: {
+  streams: { label: string; hd?: number }[];
+  activeIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Activity size={12} style={{ color: 'var(--accent-cyan)' }} />
+          <span className="text-[10px] font-bold tracking-wider" style={{ color: 'var(--text-secondary)' }}>STREAM</span>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {streams.map((s, i) => {
+            const isActive = i === activeIndex;
+            return (
+              <motion.button
+                key={i}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => onSelect(i)}
+                className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-all"
+                style={isActive ? {
+                  background: 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(0,212,255,0.15))',
+                  border: '1.5px solid rgba(0,212,255,0.6)',
+                  color: '#22D3EE',
+                  boxShadow: '0 0 12px rgba(0,212,255,0.2)',
+                } : {
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {i + 1}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared: SourceSelector ──────────────────────────────────────────────────
+function SourceSelector({
+  sources,
+  activeSource,
+  onSelect,
+}: {
+  sources: string[];
+  activeSource: string;
+  onSelect: (source: string) => void;
+}) {
+  return (
+    <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Monitor size={12} style={{ color: 'var(--accent-cyan)' }} />
+          <span className="text-[10px] font-bold tracking-wider" style={{ color: 'var(--text-secondary)' }}>SOURCE</span>
+        </div>
+        <div className="flex gap-2">
+          {sources.map((src) => {
+            const isActive = src === activeSource;
+            return (
+              <motion.button
+                key={src}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onSelect(src)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all"
+                style={isActive ? {
+                  background: 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(0,212,255,0.15))',
+                  border: '1.5px solid rgba(0,212,255,0.6)',
+                  color: '#22D3EE',
+                  boxShadow: '0 0 12px rgba(0,212,255,0.2)',
+                } : {
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {src}
+                {isActive && <CheckCircle2 size={12} />}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared: MatchInfoBar ────────────────────────────────────────────────────
+function MatchInfoBar({ match }: { match: Match }) {
+  const statusDisplay = match.status === 'HALF_TIME' ? 'HT'
+    : match.status === 'LIVE' ? 'LIVE'
+    : match.status === 'UPCOMING' ? 'UPCOMING'
+    : 'FT';
+
+  const statusColor = match.status === 'LIVE' ? '#ef4444'
+    : match.status === 'HALF_TIME' ? '#3b82f6'
+    : match.status === 'UPCOMING' ? '#f0c040'
+    : '#94a3b8';
+
+  return (
+    <div className="px-4 py-4">
+      {/* Sport & Status */}
+      <div className="flex items-center justify-center gap-2 mb-4">
+        <span className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+          {match.league?.toUpperCase() || 'FOOTBALL'}
+        </span>
+        <span style={{ color: 'var(--text-muted)' }}>·</span>
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+              style={{ background: statusColor }} />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5"
+              style={{ background: statusColor }} />
+          </span>
+          <span className="text-[10px] font-black tracking-wider" style={{ color: statusColor }}>
+            {statusDisplay}
+          </span>
+        </div>
+      </div>
+
+      {/* Home Team */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <TeamLogo src={match.homeLogo} name={match.homeTeam} size="md" />
+          <span className="text-sm font-bold text-white">{match.homeTeam}</span>
+        </div>
+        <span className="text-3xl font-black text-white tabular-nums">{match.homeScore}</span>
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3 my-2">
+        <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.08))' }} />
+        <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>VS</span>
+        <div className="flex-1 h-px" style={{ background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.08))' }} />
+      </div>
+
+      {/* Away Team */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <TeamLogo src={match.awayLogo} name={match.awayTeam} size="md" />
+          <span className="text-sm font-bold text-white">{match.awayTeam}</span>
+        </div>
+        <span className="text-3xl font-black text-white tabular-nums">{match.awayScore}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared: VideoPlayerCore ─────────────────────────────────────────────────
+function VideoPlayerCore({
+  videoRef,
+  loading,
+  error,
+  rankedStreams,
+  onRetry,
+}: {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  loading: boolean;
+  error: string | null;
+  rankedStreams: { url?: string }[];
+  onRetry: () => void;
+}) {
+  return (
+    <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000' }}>
+      {/* Loading State */}
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3">
+          <div className="relative">
+            <Loader2 className="w-10 h-10 animate-spin" style={{ color: '#22D3EE' }} />
+            <div className="absolute inset-0 blur-lg opacity-50">
+              <Loader2 className="w-10 h-10 animate-spin" style={{ color: '#22D3EE' }} />
+            </div>
+          </div>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Loading stream...
+          </p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
+          <WifiOff className="w-12 h-12 mb-3" style={{ color: '#ef4444' }} />
+          <p className="text-white font-bold text-base text-center">{error}</p>
+          {rankedStreams.length > 1 && (
+            <p className="text-xs mt-1 mb-3" style={{ color: 'var(--text-secondary)' }}>
+              Try a different stream below
+            </p>
+          )}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={onRetry}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,212,255,0.2), rgba(0,212,255,0.1))',
+              border: '1px solid rgba(0,212,255,0.4)',
+              color: '#22D3EE',
+            }}
+          >
+            <RefreshCw size={12} /> Retry
+          </motion.button>
+        </div>
+      ) : (
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          controls
+          playsInline
+          style={{ opacity: loading ? 0 : 1, objectFit: 'contain' }}
+        />
+      )}
+
+      {/* LIVE Badge */}
+      <div className="absolute top-3 left-3 z-20">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+          style={{ background: 'rgba(239,68,68,0.9)', backdropFilter: 'blur(8px)' }}>
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+          </span>
+          <span className="text-[10px] font-black tracking-wider text-white">LIVE</span>
+        </div>
+      </div>
+
+      {/* HD Badge */}
+      <div className="absolute top-3 right-3 z-20">
+        <div className="px-2 py-0.5 rounded-md"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+          <span className="text-[10px] font-black tracking-wider text-white">HD</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared: PlayerHeader ────────────────────────────────────────────────────
+function PlayerHeader({
+  match,
+  onClose,
+  onRefresh,
+  isFullscreen,
+  onToggleFullscreen,
+}: {
+  match: Match;
+  onClose: () => void;
+  onRefresh?: () => void;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+      style={{ background: 'var(--bg)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-3">
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={onClose}
+          className="p-2 rounded-xl transition-colors"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <ChevronDown size={18} style={{ color: '#fff' }} />
+        </motion.button>
+        <div>
+          <p className="text-sm font-bold text-white">{match.homeTeam} <span style={{ color: 'var(--text-muted)' }}>vs</span> {match.awayTeam}</p>
+          {match.league && <p className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>{match.league}</p>}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+          style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)' }}>
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+          </span>
+          <span className="text-[10px] font-black tracking-wider" style={{ color: '#ff6b6b' }}>LIVE</span>
+        </div>
+        {onRefresh && (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={onRefresh}
+            className="p-2 rounded-xl transition-colors"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <RefreshCw size={14} style={{ color: 'var(--text-secondary)' }} />
+          </motion.button>
+        )}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={onToggleFullscreen}
+          className="p-2 rounded-xl transition-colors"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          {isFullscreen ? <Minimize size={14} style={{ color: '#fff' }} /> : <Maximize size={14} style={{ color: '#fff' }} />}
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared: LandscapeHint ───────────────────────────────────────────────────
+function LandscapeHint() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="mx-4 mt-3 mb-1"
+    >
+      <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
+        style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.12)' }}>
+        <Smartphone size={14} className="flex-shrink-0" style={{ color: '#22D3EE' }} />
+        <span className="text-xs flex-1" style={{ color: '#22D3EE' }}>
+          Rotate to landscape for the best experience
+        </span>
+        <button onClick={() => setDismissed(true)} className="p-1 rounded-lg hover:bg-white/5">
+          <X size={12} style={{ color: '#22D3EE' }} />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Local Sports Player ─────────────────────────────────────────────────────
 function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -720,10 +1052,12 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
   const [testing, setTesting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showChannels, setShowChannels] = useState(true);
+  const [activeSource, setActiveSource] = useState('Admin');
 
+  const sourceOptions = ['Admin', 'Echo', 'Golf'];
+
+  // Test streams and rank them
   useEffect(() => {
     if (!match.streams.length) {
       setTesting(false);
@@ -750,6 +1084,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
       .finally(() => setTesting(false));
   }, [match.id]);
 
+  // Load active stream into HLS
   useEffect(() => {
     if (!activeStream || !videoRef.current) return;
     setLoading(true);
@@ -763,7 +1098,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
       hls.loadSource(proxyUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => { setLoading(false); video.play().catch(() => {}); });
-      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) setError('Stream unavailable — try another channel'); });
+      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) setError('Stream unavailable \u2014 try another'); });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = proxyUrl;
       video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); });
@@ -783,6 +1118,8 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
     }
   };
 
+  const activeStreamIndex = rankedStreams.findIndex(s => s.url === activeStream?.url);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -790,134 +1127,75 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
       exit={{ opacity: 0 }}
       ref={containerRef}
       className="fixed inset-0 z-50 flex flex-col"
-      style={{ background: '#000' }}
+      style={{ background: 'var(--bg)' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.8), transparent)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-            <ChevronDown size={20} style={{ color: '#fff' }} />
-          </button>
-          <div>
-            <p className="text-sm font-bold text-white">{match.homeTeam} vs {match.awayTeam}</p>
-            {match.league && <p className="text-[10px]" style={{ color: '#8899AA' }}>{match.league}</p>}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={match.status} />
-          <button onClick={toggleFullscreen} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-            {isFullscreen ? <Minimize size={16} style={{ color: '#fff' }} /> : <Maximize size={16} style={{ color: '#fff' }} />}
-          </button>
-        </div>
-      </div>
+      <PlayerHeader
+        match={match}
+        onClose={onClose}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
 
-      {/* Video */}
-      <div className="flex-1 relative flex items-center justify-center bg-black">
-        {(testing || loading) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3">
-            <div className="relative">
-              <Loader2 className="w-10 h-10 animate-spin text-red-500" />
-              <div className="absolute inset-0 blur-lg opacity-50">
-                <Loader2 className="w-10 h-10 animate-spin text-red-500" />
-              </div>
-            </div>
-            <p className="text-xs font-medium" style={{ color: '#8899AA' }}>
-              {testing ? 'Finding best stream...' : 'Loading stream...'}
-            </p>
-          </div>
-        )}
-        {error && !loading ? (
-          <div className="text-center px-4">
-            <WifiOff className="w-12 h-12 mx-auto mb-3 text-red-500" />
-            <p className="text-white font-bold text-base">{error}</p>
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        {/* Landscape Hint */}
+        <LandscapeHint />
+
+        {/* Video Player Container */}
+        <div className="px-4 mt-3">
+          <div className="rounded-2xl overflow-hidden"
+            style={{ border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+            {/* Video - 16:9 centered */}
+            <VideoPlayerCore
+              videoRef={videoRef}
+              loading={testing || loading}
+              error={error}
+              rankedStreams={rankedStreams}
+              onRetry={() => {
+                setError(null);
+                setLoading(true);
+                if (activeStream) {
+                  const url = activeStream.url;
+                  setActiveStream(null);
+                  setTimeout(() => setActiveStream(rankedStreams.find(s => s.url === url) || rankedStreams[0]), 50);
+                }
+              }}
+            />
+
+            {/* Stream Selector */}
             {rankedStreams.length > 0 && (
-              <p className="text-xs mt-1 mb-3" style={{ color: '#8899AA' }}>Try a different channel below</p>
+              <StreamSelector
+                streams={rankedStreams.map((s, i) => ({ label: i === 0 ? s.name : `Ch ${i + 1}` }))}
+                activeIndex={activeStreamIndex >= 0 ? activeStreamIndex : 0}
+                onSelect={(idx) => setActiveStream(rankedStreams[idx])}
+              />
             )}
-          </div>
-        ) : (
-          <video
-            ref={videoRef}
-            className="w-full h-full"
-            controls
-            playsInline
-            muted={isMuted}
-            style={{ opacity: loading || testing ? 0 : 1 }}
-          />
-        )}
-      </div>
 
-      {/* Score Overlay */}
-      <div className="absolute bottom-20 left-4 right-4 flex items-center justify-center gap-4 z-10 pointer-events-none">
-        <div className="flex items-center gap-3 px-4 py-2 rounded-2xl pointer-events-auto"
-          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="flex items-center gap-2">
-            <TeamLogo src={match.homeLogo} name={match.homeTeam} size="sm" />
-            <span className="text-xs font-bold text-white">{match.homeTeam}</span>
-          </div>
-          <span className="text-lg font-black text-white tabular-nums">
-            {match.homeScore} - {match.awayScore}
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white">{match.awayTeam}</span>
-            <TeamLogo src={match.awayLogo} name={match.awayTeam} size="sm" />
+            {/* Source Selector */}
+            <SourceSelector
+              sources={sourceOptions}
+              activeSource={activeSource}
+              onSelect={setActiveSource}
+            />
+
+            {/* Report Issue */}
+            <div className="px-4 py-2.5 flex items-center gap-2"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <AlertTriangle size={12} style={{ color: 'var(--text-muted)' }} />
+              <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                Report stream issue
+              </span>
+            </div>
+
+            {/* Match Info */}
+            <MatchInfoBar match={match} />
           </div>
         </div>
-      </div>
 
-      {/* Channel Switcher */}
-      {rankedStreams.length > 0 && (
-        <div className="flex-shrink-0 px-4 pb-4 pt-3"
-          style={{ background: 'linear-gradient(0deg, rgba(0,0,0,0.95), rgba(0,0,0,0.8))', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={() => setShowChannels(!showChannels)} className="flex items-center gap-2 mb-2 w-full">
-            <Radio size={10} style={{ color: '#8899AA' }} />
-            <span className="text-[10px] font-bold" style={{ color: '#8899AA' }}>CHANNELS</span>
-            <span className="text-[10px] ml-auto" style={{ color: '#8899AA' }}>{showChannels ? 'Hide' : 'Show'}</span>
-          </button>
-          <AnimatePresence>
-            {showChannels && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}
-              >
-                {rankedStreams.map((stream, idx) => {
-                  const isActive = activeStream?.url === stream.url;
-                  return (
-                    <button
-                      key={stream.url}
-                      onClick={() => setActiveStream(stream)}
-                      className="flex-shrink-0 flex flex-col items-start px-3 py-2 rounded-xl text-left transition-all"
-                      style={isActive ? {
-                        background: 'linear-gradient(135deg, rgba(239,68,68,0.25), rgba(220,38,38,0.15))',
-                        border: '1px solid rgba(239,68,68,0.5)',
-                        boxShadow: '0 0 12px rgba(239,68,68,0.2)',
-                      } : {
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                      }}
-                    >
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        {isActive && <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" /></span>}
-                        <span className="text-xs font-bold" style={{ color: isActive ? '#fff' : '#8899AA' }}>
-                          {idx === 0 ? stream.name : `Ch ${idx + 1}`}
-                        </span>
-                        {idx === 0 && !isActive && stream.ok !== false && <Zap size={9} style={{ color: '#f0c040' }} />}
-                      </div>
-                      {stream.ms && stream.ms < 9999 && (
-                        <span className="text-[9px]" style={{ color: stream.ok ? '#22c55e' : '#ef4444' }}>
-                          {stream.ok ? `${stream.ms}ms` : 'offline'}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
+        {/* Extra bottom padding */}
+        <div className="h-6" />
+      </div>
     </motion.div>
   );
 }
@@ -935,11 +1213,13 @@ function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }
   const [error, setError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showChannels, setShowChannels] = useState(true);
+  const [activeSource, setActiveSource] = useState('Admin');
+
+  const sourceOptions = ['Admin', 'Echo', 'Golf'];
 
   useEffect(() => {
     if (match.embedhdStreams && match.embedhdStreams.length > 0) {
-      const chs = match.embedhdStreams.map((s, i) => ({ hd: s.hd, label: i === 0 ? 'Primary' : `Channel ${i + 1}` }));
+      const chs = match.embedhdStreams.map((s, i) => ({ hd: s.hd, label: i === 0 ? 'Primary' : `Ch ${i + 1}` }));
       setChannels(chs);
     }
   }, [match.embedhdStreams]);
@@ -988,6 +1268,21 @@ function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }
     else { document.exitFullscreen().catch(() => {}); setIsFullscreen(false); }
   };
 
+  const refreshStream = useCallback(() => {
+    setError(null);
+    setResolving(true);
+    setProxyUrl(null);
+    fetch(`${API_BASE}/api/embedhd/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hd: match.embedhdStreams?.[activeChannel]?.hd }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.success && data.streamUrl) setProxyUrl(data.streamUrl); else setError(data.error || 'Could not resolve stream'); })
+      .catch(() => setError('Failed to resolve stream'))
+      .finally(() => setResolving(false));
+  }, [match.embedhdStreams, activeChannel]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -995,99 +1290,68 @@ function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }
       exit={{ opacity: 0 }}
       ref={containerRef}
       className="fixed inset-0 z-50 flex flex-col"
-      style={{ background: '#000' }}
+      style={{ background: 'var(--bg)' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.8), transparent)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-            <ChevronDown size={20} style={{ color: '#fff' }} />
-          </button>
-          <div>
-            <p className="text-sm font-bold text-white">{match.homeTeam} vs {match.awayTeam}</p>
-            {match.league && <p className="text-[10px]" style={{ color: '#8899AA' }}>{match.league}</p>}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={match.status} />
-          <button onClick={toggleFullscreen} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-            {isFullscreen ? <Minimize size={16} style={{ color: '#fff' }} /> : <Maximize size={16} style={{ color: '#fff' }} />}
-          </button>
-        </div>
-      </div>
+      <PlayerHeader
+        match={match}
+        onClose={onClose}
+        onRefresh={refreshStream}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
 
-      {/* Video */}
-      <div className="flex-1 relative flex items-center justify-center bg-black">
-        {(resolving || loading) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3">
-            <Loader2 className="w-10 h-10 animate-spin text-red-500" />
-            <p className="text-xs font-medium" style={{ color: '#8899AA' }}>
-              {resolving ? 'Resolving stream...' : 'Loading stream...'}
-            </p>
-          </div>
-        )}
-        {error && !loading ? (
-          <div className="text-center px-4">
-            <WifiOff className="w-12 h-12 mx-auto mb-3 text-red-500" />
-            <p className="text-white font-bold text-base">{error}</p>
-          </div>
-        ) : (
-          <video ref={videoRef} className="w-full h-full" controls playsInline style={{ opacity: loading || resolving ? 0 : 1 }} />
-        )}
-      </div>
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        {/* Landscape Hint */}
+        <LandscapeHint />
 
-      {/* Score Overlay */}
-      <div className="absolute bottom-20 left-4 right-4 flex items-center justify-center gap-4 z-10 pointer-events-none">
-        <div className="flex items-center gap-3 px-4 py-2 rounded-2xl pointer-events-auto"
-          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="flex items-center gap-2">
-            <TeamLogo src={match.homeLogo} name={match.homeTeam} size="sm" />
-            <span className="text-xs font-bold text-white">{match.homeTeam}</span>
-          </div>
-          <span className="text-lg font-black text-white tabular-nums">{match.homeScore} - {match.awayScore}</span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white">{match.awayTeam}</span>
-            <TeamLogo src={match.awayLogo} name={match.awayTeam} size="sm" />
-          </div>
-        </div>
-      </div>
+        {/* Video Player Container */}
+        <div className="px-4 mt-3">
+          <div className="rounded-2xl overflow-hidden"
+            style={{ border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+            {/* Video - 16:9 centered */}
+            <VideoPlayerCore
+              videoRef={videoRef}
+              loading={resolving || loading}
+              error={error}
+              rankedStreams={channels}
+              onRetry={refreshStream}
+            />
 
-      {/* Channel Switcher */}
-      {channels.length > 0 && (
-        <div className="flex-shrink-0 px-4 pb-4 pt-3"
-          style={{ background: 'linear-gradient(0deg, rgba(0,0,0,0.95), rgba(0,0,0,0.8))', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={() => setShowChannels(!showChannels)} className="flex items-center gap-2 mb-2 w-full">
-            <Radio size={10} style={{ color: '#8899AA' }} />
-            <span className="text-[10px] font-bold" style={{ color: '#8899AA' }}>CHANNELS</span>
-            <span className="text-[10px] ml-auto" style={{ color: '#8899AA' }}>{showChannels ? 'Hide' : 'Show'}</span>
-          </button>
-          <AnimatePresence>
-            {showChannels && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-                {channels.map((ch, idx) => {
-                  const isActive = idx === activeChannel;
-                  return (
-                    <button key={ch.hd} onClick={() => setActiveChannel(idx)}
-                      className="flex-shrink-0 flex flex-col items-start px-3 py-2 rounded-xl text-left transition-all"
-                      style={isActive ? {
-                        background: 'linear-gradient(135deg, rgba(239,68,68,0.25), rgba(220,38,38,0.15))',
-                        border: '1px solid rgba(239,68,68,0.5)', boxShadow: '0 0 12px rgba(239,68,68,0.2)',
-                      } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        {isActive && <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" /></span>}
-                        <span className="text-xs font-bold" style={{ color: isActive ? '#fff' : '#8899AA' }}>{ch.label}</span>
-                      </div>
-                      <span className="text-[9px]" style={{ color: '#8899AA' }}>HD {ch.hd}</span>
-                    </button>
-                  );
-                })}
-              </motion.div>
+            {/* Stream Selector */}
+            {channels.length > 0 && (
+              <StreamSelector
+                streams={channels.map((ch) => ({ label: ch.label, hd: ch.hd }))}
+                activeIndex={activeChannel}
+                onSelect={setActiveChannel}
+              />
             )}
-          </AnimatePresence>
+
+            {/* Source Selector */}
+            <SourceSelector
+              sources={sourceOptions}
+              activeSource={activeSource}
+              onSelect={setActiveSource}
+            />
+
+            {/* Report Issue */}
+            <div className="px-4 py-2.5 flex items-center gap-2"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <AlertTriangle size={12} style={{ color: 'var(--text-muted)' }} />
+              <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                Report stream issue
+              </span>
+            </div>
+
+            {/* Match Info */}
+            <MatchInfoBar match={match} />
+          </div>
         </div>
-      )}
+
+        {/* Extra bottom padding */}
+        <div className="h-6" />
+      </div>
     </motion.div>
   );
 }
@@ -1152,7 +1416,6 @@ export default function SportsPage() {
           startTime: m.startTime || null,
           league: m.league || null,
           round: m.round || m.matchRound || undefined,
-          periodScores: m.periodScores || undefined,
           venue: m.venue || undefined,
           referee: m.referee || undefined,
           stats: m.stats || undefined,
