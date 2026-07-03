@@ -1055,7 +1055,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeSource, setActiveSource] = useState('Admin');
 
-  const sourceOptions = ['Admin', 'Echo', 'Golf'];
+  const sourceOptions = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
 
   // Test streams and rank them
   useEffect(() => {
@@ -1215,7 +1215,7 @@ function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeSource, setActiveSource] = useState('Admin');
 
-  const sourceOptions = ['Admin', 'Echo', 'Golf'];
+  const sourceOptions = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
 
   useEffect(() => {
     if (match.embedhdStreams && match.embedhdStreams.length > 0) {
