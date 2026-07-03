@@ -9,6 +9,7 @@ import {
   Users, Timer, Flag, Smartphone, Monitor, AlertTriangle
 } from 'lucide-react';
 import Hls from 'hls.js';
+import MatchStatsOverlay from '../components/football/MatchStatsOverlay';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Stream {
@@ -402,6 +403,16 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
             </div>
           </div>
         )}
+
+        {/* Football Stats Overlay */}
+        <div className="px-5 pb-6">
+          <MatchStatsOverlay
+            matchId={match.id}
+            homeTeamName={match.homeTeam}
+            awayTeamName={match.awayTeam}
+            isLive={match.status === 'LIVE'}
+          />
+        </div>
       </motion.div>
     </motion.div>
   );
@@ -1190,6 +1201,18 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
 
             {/* Match Info */}
             <MatchInfoBar match={match} />
+
+            {/* Football Stats Overlay */}
+            {match.status === 'LIVE' || match.status === 'HALF_TIME' || match.status === 'FINISHED' ? (
+              <div className="px-4 pb-4 pt-2">
+                <MatchStatsOverlay
+                  matchId={match.id}
+                  homeTeamName={match.homeTeam}
+                  awayTeamName={match.awayTeam}
+                  isLive={match.status === 'LIVE'}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -1346,6 +1369,18 @@ function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }
 
             {/* Match Info */}
             <MatchInfoBar match={match} />
+
+            {/* Football Stats Overlay */}
+            {match.status === 'LIVE' || match.status === 'HALF_TIME' || match.status === 'FINISHED' ? (
+              <div className="px-4 pb-4 pt-2">
+                <MatchStatsOverlay
+                  matchId={match.id}
+                  homeTeamName={match.homeTeam}
+                  awayTeamName={match.awayTeam}
+                  isLive={match.status === 'LIVE'}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 

@@ -11,6 +11,7 @@
 - 🎬 **Movies** — Browse, search, and stream thousands of movies
 - 📺 **TV Shows** — Full season & episode support with continue watching
 - 🌸 **Anime** — Powered by AniList with sub/dub switching
+- ⚽ **Live Sports** — Football matches with real-time stats & lineups
 - 🔍 **Smart Search** — Real-time results from TMDB + AniList combined
 - 🎭 **Cinematic UI** — OLED black, glassmorphism, Framer Motion animations
 - 📱 **Mobile First** — Responsive with bottom navigation for phones
@@ -19,6 +20,16 @@
 - 👤 **Auth System** — Email/password + Guest mode
 - 🎮 **Multi-Server Player** — VidSrc, VidSrc Pro, MegaPlay
 - 🌐 **Sub / Dub Toggle** — For anime content
+
+### ⚽ Football Match Center
+
+Real-time football match statistics powered by football-data.org API:
+
+- **Starting XI & Formations** — Visual pitch display showing player positions (4-3-3, 4-2-3-1, 3-5-2, etc.)
+- **Live Match Statistics** — Ball possession, shots, corners, fouls, cards, offsides, pass accuracy
+- **Match Events Timeline** — Goals (with assists), substitutions, yellow/red cards, VAR reviews
+- **Auto-refresh** — Live matches update every 30 seconds
+- **Demo Mode** — Realistic demo data shown when no API key is configured
 
 ---
 
@@ -58,6 +69,7 @@ zentrix-streaming/
 │   │   ├── components/     ← UI components
 │   │   │   ├── layout/     ← Navbar, BottomNav, Layout
 │   │   │   ├── ui/         ← Cards, Hero, ContentRow
+│   │   │   ├── football/   ← MatchStats, Lineups, Events
 │   │   │   └── player/     ← Video player
 │   │   ├── pages/          ← Route pages
 │   │   ├── services/       ← TMDB & AniList API
@@ -102,6 +114,7 @@ zentrix-streaming/
 |-----|-------|
 | TMDB | Movies, TV shows, metadata |
 | AniList GraphQL | Anime data, ratings |
+| football-data.org | Live football match stats & lineups |
 | VidSrc | Primary streaming server |
 | VidSrc Pro | Secondary streaming server |
 | MegaPlay | Sub/dub anime streaming |
@@ -118,6 +131,18 @@ The TMDB API key is pre-configured. To use your own:
    const TMDB_API_KEY = 'your_key_here';
    ```
 
+### ⚽ Football Data API (Optional)
+
+To display **real** football match statistics instead of demo data:
+
+1. Get a free API key at https://www.football-data.org/
+2. Add it to `backend/.env`:
+   ```env
+   FOOTBALL_DATA_API_KEY=your_api_key_here
+   ```
+3. The free tier includes 10 calls/minute which is sufficient for match stats
+4. Without a key, realistic demo data is automatically displayed
+
 ---
 
 ## 📱 Pages & Routes
@@ -129,6 +154,7 @@ The TMDB API key is pre-configured. To use your own:
 | `/browse/:category` | Browse movies / tv / anime |
 | `/details/:type/:id` | Content detail page |
 | `/watch/:type/:id` | Video player |
+| `/sports` | Live sports streaming + match stats |
 | `/watchlist` | Saved list, favorites, history |
 | `/profile` | User profile & settings |
 | `/auth` | Sign in / Register |
@@ -155,6 +181,9 @@ PORT=3001
 JWT_SECRET=your-strong-secret-here
 JWT_EXPIRES_IN=7d
 DB_PATH=./db/zentrix.db
+
+# Optional: Football data API for real match statistics
+FOOTBALL_DATA_API_KEY=your-football-data-api-key
 ```
 
 ---

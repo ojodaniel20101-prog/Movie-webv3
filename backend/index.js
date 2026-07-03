@@ -13,6 +13,7 @@ const animePythonRoutesV2 = require('./routes/animeheaven-python-v2');
 const animePythonRoutes = require('./routes/animeheaven-python');
 const sportsLiveRoutes = require('./routes/sports-live');
 const sportsRoutes   = require('./routes/sports');
+const footballStatsRoutes = require('./routes/football-stats');
 const embedhdRoutes  = require('./routes/embedhd');
 
 const app  = express();
@@ -67,6 +68,7 @@ app.use('/api/anime/python', animePythonRoutesV2);
 app.use('/api/anime/python-old', animePythonRoutes);
 app.use('/api/sports/live', sportsLiveRoutes);
 app.use('/api/sports', sportsRoutes);
+app.use('/api/football', footballStatsRoutes);
 app.use('/api/embedhd', embedhdRoutes);
 
 app.get('/api/health', (_req, res) =>
