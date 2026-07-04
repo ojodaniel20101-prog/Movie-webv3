@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { ContentType } from '@/types';
 import AdBlockGuideModal from '@/components/adblock/AdBlockGuideModal';
+import { MediaPlayer } from 'dashjs';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -172,6 +173,10 @@ export default function VideoPlayer({
 
   // ── Download state ───────────────────────────────────────────────
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+  // ── DASH player ref ──────────────────────────────────────────────
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const dashPlayerRef = useRef<any>(null);
 
   // ── VidLink postMessage event listener ───────────────────────────
   useEffect(() => {
@@ -395,7 +400,8 @@ export default function VideoPlayer({
   }, [ahAnimeId, ahEpId, episode, title]);
 
   // ── MovieBox download handler ────────────────────────────────────
-  const handleMovieboxDownload = useCallback((quality: string) => {
+  // Uses backend proxy to bypass cross-origin download restrictions
+  const handleMovieboxDownload = useCallback(async (quality: string) => {
     if (!movieboxData?.download_options?.length) return;
 
     const option = movieboxData.download_options.find(o => o.quality === quality)
@@ -403,12 +409,33 @@ export default function VideoPlayer({
 
     if (!option?.url) return;
 
-    const a = document.createElement('a');
-    a.href = option.url;
-    a.download = `${(movieboxData.title || title || 'movie').replace(/[^a-zA-Z0-9\s]/g, '_')}_${quality}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const fileName = `${(movieboxData.title || title || 'movie').replace(/[^a-zA-Z0-9\s]/g, '_')}_${quality}.mp4`;
+
+    try {
+      // Use backend proxy to fetch and serve the file with proper download headers
+      const proxyUrl = `/api/moviebox/proxy-download?url=${encodeURIComponent(option.url)}&filename=${encodeURIComponent(fileName)}`;
+
+      // Trigger download via iframe (avoids page navigation)
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = proxyUrl;
+      document.body.appendChild(iframe);
+
+      // Remove iframe after download starts
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 30000);
+    } catch (err) {
+      console.error('[Download] Proxy download failed, falling back:', err);
+      // Fallback: try direct download (may redirect for cross-origin)
+      const a = document.createElement('a');
+      a.href = option.url;
+      a.download = fileName;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   }, [movieboxData, title]);
 
   // ── MovieBox quality change ──────────────────────────────────────
@@ -440,6 +467,51 @@ export default function VideoPlayer({
     return () => abortRef.current?.abort();
   }, [isMoviebox, resolveMovieboxUrl]);
 
+  // ── Initialize DASH player for MovieBox streams ──────────────────
+  useEffect(() => {
+    if (!isMoviebox || !movieboxVideoUrl || !videoRef.current) return;
+
+    // Check if this is a DASH stream
+    const isDash = movieboxVideoUrl.endsWith('.mpd') ||
+      movieboxData?.streaming_format === 'dash' ||
+      movieboxData?.streams?.[0]?.type === 'dash';
+
+    if (!isDash) return; // Let native video handle HLS/MP4
+
+    // Destroy previous DASH player instance
+    if (dashPlayerRef.current) {
+      try {
+        dashPlayerRef.current.destroy();
+      } catch (e) { /* ignore */ }
+      dashPlayerRef.current = null;
+    }
+
+    // Initialize new DASH player
+    try {
+      const player = MediaPlayer.create();
+      player.initialize(videoRef.current, movieboxVideoUrl, true);
+
+      // Enable CORS for cross-origin DASH manifests
+      player.setXHRWithCredentialsForType('GET', false);
+
+      dashPlayerRef.current = player;
+
+      console.log('[DASH] Player initialized for:', movieboxVideoUrl);
+    } catch (err) {
+      console.error('[DASH] Failed to initialize player:', err);
+    }
+
+    // Cleanup on unmount or URL change
+    return () => {
+      if (dashPlayerRef.current) {
+        try {
+          dashPlayerRef.current.destroy();
+        } catch (e) { /* ignore */ }
+        dashPlayerRef.current = null;
+      }
+    };
+  }, [isMoviebox, movieboxVideoUrl, movieboxData]);
+
   // ── Final stream URL ─────────────────────────────────────────────
   const streamUrl = useMemo(() => {
     if (isAnime && isMegaplay)     return megaplayUrl || '';
@@ -465,6 +537,13 @@ export default function VideoPlayer({
   };
 
   const changeServer = (id: ServerKey) => {
+    // Destroy DASH player when switching away from MovieBox
+    if (activeServer === 'moviebox' && dashPlayerRef.current) {
+      try {
+        dashPlayerRef.current.destroy();
+      } catch (e) { /* ignore */ }
+      dashPlayerRef.current = null;
+    }
     setActiveServer(id);
     setServerMenu(false);
     setHasError(false);
@@ -478,6 +557,18 @@ export default function VideoPlayer({
     setAhError(null);
     setIframeKey(k => k + 1);
   };
+
+  // Cleanup DASH player on unmount
+  useEffect(() => {
+    return () => {
+      if (dashPlayerRef.current) {
+        try {
+          dashPlayerRef.current.destroy();
+        } catch (e) { /* ignore */ }
+        dashPlayerRef.current = null;
+      }
+    };
+  }, []);
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -816,11 +907,11 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {/* ── MovieBox native video player ── */}
+          {/* ── MovieBox DASH/native video player ── */}
           {isMoviebox && !movieboxLoading && !movieboxError && movieboxVideoUrl && (
             <video
+              ref={videoRef}
               key={movieboxVideoUrl}
-              src={movieboxVideoUrl}
               controls
               autoPlay
               playsInline

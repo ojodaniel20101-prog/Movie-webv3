@@ -249,6 +249,85 @@ router.get('/download', async (req, res) => {
   }
 });
 
+// ─── GET /api/moviebox/proxy-download?url={url}&filename={name} ──────
+// Proxies external download URLs to bypass CORS and force browser download
+router.get('/proxy-download', async (req, res) => {
+  try {
+    const { url, filename } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    const decodedUrl = decodeURIComponent(String(url));
+    const safeFilename = filename
+      ? decodeURIComponent(String(filename)).replace(/[^a-zA-Z0-9._-]/g, '_')
+      : 'download.mp4';
+
+    console.log(`[MovieBox] Proxy download: ${decodedUrl.substring(0, 80)}... as ${safeFilename}`);
+
+    // Fetch the file from the external URL
+    const response = await fetch(decodedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Referer': 'https://h5-api.aoneroom.com/',
+      },
+      redirect: 'follow',
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: `Source returned HTTP ${response.status}`,
+        url: decodedUrl,
+      });
+    }
+
+    // Get content info from source response
+    const contentType = response.headers.get('content-type') || 'video/mp4';
+    const contentLength = response.headers.get('content-length');
+
+    // Set download headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+
+    // Stream the response body to the client
+    const bodyReader = response.body;
+    if (bodyReader) {
+      const reader = bodyReader.getReader();
+      const pump = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              res.end();
+              break;
+            }
+            res.write(Buffer.from(value));
+          }
+        } catch (err) {
+          console.error('[MovieBox] Proxy download stream error:', err.message);
+          if (!res.headersSent) {
+            res.status(500).end();
+          } else {
+            res.end();
+          }
+        }
+      };
+      pump();
+    } else {
+      // Fallback: buffer entire response
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    }
+  } catch (err) {
+    console.error('[MovieBox] Proxy download error:', err.message);
+    res.status(500).json({ error: 'Download failed', details: err.message });
+  }
+});
+
 // ─── GET /api/moviebox/health ────────────────────────────────────────
 router.get('/health', async (req, res) => {
   try {

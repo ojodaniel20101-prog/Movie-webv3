@@ -100,15 +100,19 @@ export default function DownloadSection({
           if (!srcData.success) throw new Error('No download URL found');
           setDownloadProgress((prev) => ({ ...prev, [ep.id]: 90 }));
 
-          // 4. Trigger browser download
+          // 4. Trigger browser download via backend proxy
           const downloadUrl = srcData.downloadUrl || srcData.streamUrl;
           if (downloadUrl) {
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `${title.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')}_EP${String(ep.episode_number).padStart(2, '0')}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            const fileName = `${title.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')}_EP${String(ep.episode_number).padStart(2, '0')}.mp4`;
+            // Use proxy to bypass cross-origin restrictions
+            const proxyUrl = `/api/moviebox/proxy-download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent(fileName)}`;
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = proxyUrl;
+            document.body.appendChild(iframe);
+            setTimeout(() => {
+              if (iframe.parentNode) document.body.removeChild(iframe);
+            }, 30000);
           }
           setDownloadProgress((prev) => ({ ...prev, [ep.id]: 100 }));
           setCompletedDownloads((prev) => new Set([...prev, ep.id]));
