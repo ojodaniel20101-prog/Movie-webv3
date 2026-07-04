@@ -50,16 +50,16 @@ export default function MatchStatsOverlay({
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchFootballData(matchId);
+      const data = await fetchFootballData(matchId, homeTeamName, awayTeamName);
       setLineups(data.lineups);
       setStats(data.stats);
       setEvents(data.events);
       setIsDemo(data.isDemo);
       setLastUpdated(new Date());
     } catch (err: any) {
-      // Try demo data as ultimate fallback
+      // Try demo data as ultimate fallback (pass team names for real data lookup)
       try {
-        const demo = await fetchDemoData(matchId);
+        const demo = await fetchDemoData(matchId, homeTeamName, awayTeamName);
         setLineups(demo.lineups);
         setStats(demo.stats);
         setEvents(demo.events);
@@ -71,7 +71,7 @@ export default function MatchStatsOverlay({
     } finally {
       setLoading(false);
     }
-  }, [matchId]);
+  }, [matchId, homeTeamName, awayTeamName]);
 
   useEffect(() => {
     loadData();

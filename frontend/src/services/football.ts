@@ -58,13 +58,23 @@ export interface MatchStatistics {
 /**
  * Fetch demo data (lineups, stats, events) for any match ID.
  * This generates realistic demo data when no real API key is available.
+ * Passes team names to get real data for known matches.
  */
-export async function fetchDemoData(matchId: string): Promise<{
+export async function fetchDemoData(
+  matchId: string,
+  homeTeam?: string,
+  awayTeam?: string,
+): Promise<{
   lineups: MatchLineups;
   stats: MatchStatistics;
   events: MatchEvent[];
 }> {
-  const res = await fetch(`${API_BASE}/api/football/demo/${matchId}`);
+  const params = new URLSearchParams();
+  if (homeTeam) params.append('homeTeam', homeTeam);
+  if (awayTeam) params.append('awayTeam', awayTeam);
+  const query = params.toString() ? `?${params.toString()}` : '';
+
+  const res = await fetch(`${API_BASE}/api/football/demo/${matchId}${query}`);
   if (!res.ok) throw new Error('Failed to fetch demo data');
   const data = await res.json();
   if (!data.success) throw new Error(data.error || 'Unknown error');
@@ -116,8 +126,13 @@ export async function fetchEvents(matchId: string): Promise<MatchEvent[] | null>
 /**
  * Fetch all football data (lineups + stats + events) for a match.
  * Uses demo data as fallback when real API is unavailable.
+ * Passes team names to get real data for known matches.
  */
-export async function fetchFootballData(matchId: string): Promise<{
+export async function fetchFootballData(
+  matchId: string,
+  homeTeam?: string,
+  awayTeam?: string,
+): Promise<{
   lineups: MatchLineups;
   stats: MatchStatistics;
   events: MatchEvent[];
@@ -140,8 +155,8 @@ export async function fetchFootballData(matchId: string): Promise<{
     };
   }
 
-  // Fallback to demo data
-  const demo = await fetchDemoData(matchId);
+  // Fallback to demo data (passes team names for real data lookup)
+  const demo = await fetchDemoData(matchId, homeTeam, awayTeam);
   return {
     ...demo,
     isDemo: true,
