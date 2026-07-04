@@ -68,6 +68,7 @@ export async function fetchDemoData(
   lineups: MatchLineups;
   stats: MatchStatistics;
   events: MatchEvent[];
+  demo: boolean;
 }> {
   const params = new URLSearchParams();
   if (homeTeam) params.append('homeTeam', homeTeam);
@@ -158,7 +159,9 @@ export async function fetchFootballData(
   // Fallback to demo data (passes team names for real data lookup)
   const demo = await fetchDemoData(matchId, homeTeam, awayTeam);
   return {
-    ...demo,
-    isDemo: true,
+    lineups: demo.lineups,
+    stats: demo.stats,
+    events: demo.events,
+    isDemo: demo.demo, // Use backend's demo flag (false when real data is available)
   };
 }
