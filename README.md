@@ -201,3 +201,6 @@ Switch servers in the player if a stream doesn't load.
 
 *Built with ❤️ · Powered by TMDB & AniList*
 # Updated Sat Jul  4 22:27:59 WAT 2026
+
+
+<!-- Build trigger: 1783207377 -->
