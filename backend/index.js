@@ -15,6 +15,7 @@ const sportsLiveRoutes = require('./routes/sports-live');
 const sportsRoutes   = require('./routes/sports');
 const footballStatsRoutes = require('./routes/football-stats');
 const embedhdRoutes  = require('./routes/embedhd');
+const movieboxRoutes = require('./routes/moviebox');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -70,6 +71,7 @@ app.use('/api/sports/live', sportsLiveRoutes);
 app.use('/api/sports', sportsRoutes);
 app.use('/api/football', footballStatsRoutes);
 app.use('/api/embedhd', embedhdRoutes);
+app.use('/api/moviebox', movieboxRoutes);
 
 app.get('/api/health', (_req, res) =>
   res.json({ status: 'ok', service: 'Zentrix Streaming API', version: '1.1.0' })
