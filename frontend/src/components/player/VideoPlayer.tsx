@@ -177,6 +177,11 @@ export default function VideoPlayer({
   // ── DASH player ref ──────────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const dashPlayerRef = useRef<any>(null);
+  const selectedQualityRef = useRef<string>(selectedQuality);
+  const qualityIndexMapRef = useRef<Map<string, number>>(new Map());
+
+  // Keep ref in sync with state so event handlers see current value
+  selectedQualityRef.current = selectedQuality;
 
   // ── VidLink postMessage event listener ───────────────────────────
   useEffect(() => {
@@ -441,13 +446,31 @@ export default function VideoPlayer({
   // ── MovieBox quality change ──────────────────────────────────────
   const handleMovieboxQualityChange = useCallback((quality: string) => {
     setSelectedQuality(quality);
+
+    // Use dash.js internal quality switching (same MPD, different Representation)
+    if (dashPlayerRef.current) {
+      const idx = qualityIndexMapRef.current.get(quality);
+      if (idx !== undefined) {
+        try {
+          dashPlayerRef.current.setAutoSwitchQualityFor('video', false);
+          dashPlayerRef.current.setQualityFor('video', idx);
+          console.log(`[DASH] Switched to quality: ${quality} (index ${idx})`);
+        } catch (e) {
+          console.error('[DASH] Quality switch failed:', e);
+        }
+        return;
+      }
+    }
+
+    // Fallback: if DASH player isn't ready or index unknown, switch URL
+    // (for HLS/MP4 streams where each quality has a different URL)
     if (movieboxData?.streams) {
       const stream = movieboxData.streams.find(s => s.quality === quality);
-      if (stream) {
+      if (stream && stream.url !== movieboxVideoUrl) {
         setMovieboxVideoUrl(stream.url);
       }
     }
-  }, [movieboxData]);
+  }, [movieboxData, movieboxVideoUrl]);
 
   useEffect(() => {
     if (isAnime && isAnimeHeaven) resolveAnimeHeavenUrl();
@@ -470,6 +493,7 @@ export default function VideoPlayer({
   // ── Initialize DASH player for MovieBox streams ──────────────────
   useEffect(() => {
     if (!isMoviebox || !movieboxVideoUrl || !videoRef.current) return;
+    if (!movieboxData?.streams?.length) return;
 
     // Check if this is a DASH stream
     const isDash = movieboxVideoUrl.endsWith('.mpd') ||
@@ -480,33 +504,91 @@ export default function VideoPlayer({
 
     // Destroy previous DASH player instance
     if (dashPlayerRef.current) {
-      try {
-        dashPlayerRef.current.destroy();
-      } catch (e) { /* ignore */ }
+      try { dashPlayerRef.current.destroy(); } catch (e) { /* ignore */ }
       dashPlayerRef.current = null;
     }
 
-    // Initialize new DASH player
-    try {
-      const player = MediaPlayer.create();
-      player.initialize(videoRef.current, movieboxVideoUrl, true);
+    // Reset quality index map for new stream
+    qualityIndexMapRef.current = new Map();
 
-      // Enable CORS for cross-origin DASH manifests
-      player.setXHRWithCredentialsForType('GET', false);
+    try {
+      // Get auth cookies from the first stream for proxy authentication
+      const firstStream = movieboxData.streams[0];
+      const cookieString = firstStream?.cookie_string || '';
+
+      // Build proxied manifest URL — backend rewrites all segment URLs
+      const proxyManifestUrl = `/api/moviebox/dash-manifest?url=${encodeURIComponent(movieboxVideoUrl)}&cookies=${encodeURIComponent(cookieString)}`;
+
+      const player = MediaPlayer.create();
+
+      // Configure: disable auto bitrate switching (we handle quality manually)
+      player.updateSettings({
+        streaming: {
+          abr: { autoSwitchBitrate: { video: false } },
+          buffer: { fastSwitchEnabled: true },
+        },
+      });
+
+      player.initialize(videoRef.current, proxyManifestUrl, true);
+
+      // ── Error handling ──────────────────────────────
+      player.on('error', (e: any) => {
+        console.error('[DASH] Player error:', e);
+        const errMsg = e?.error?.message || e?.error || 'DASH playback failed';
+        setMovieboxError(`Playback error: ${errMsg}. Try reloading or switching server.`);
+      });
+
+      player.on('manifestError', (e: any) => {
+        console.error('[DASH] Manifest error:', e);
+        setMovieboxError('Failed to load DASH manifest. The stream may be unavailable.');
+      });
+
+      player.on('segmentLoadingFailed', (e: any) => {
+        console.error('[DASH] Segment loading failed:', e);
+      });
+
+      // ── Quality mapping + initial selection ─────────
+      player.on('streamInitialized', () => {
+        console.log('[DASH] Stream initialized');
+
+        const bitrateList = player.getBitrateInfoListFor('video');
+        console.log('[DASH] Available bitrates:', bitrateList);
+
+        const newMap = new Map<string, number>();
+        movieboxData.streams.forEach((stream) => {
+          const height = parseInt(stream.quality.replace('p', ''), 10);
+          // Match by height (±10px tolerance) or bandwidth proximity
+          const matchIdx = bitrateList.findIndex((bi: any) =>
+            Math.abs((bi.height || 0) - height) < 10
+          );
+          if (matchIdx >= 0) {
+            newMap.set(stream.quality, matchIdx);
+          }
+        });
+        qualityIndexMapRef.current = newMap;
+        console.log('[DASH] Quality index map:', Object.fromEntries(newMap));
+
+        // Apply currently-selected quality
+        const targetQuality = selectedQualityRef.current;
+        const targetIdx = newMap.get(targetQuality);
+        if (targetIdx !== undefined) {
+          player.setAutoSwitchQualityFor('video', false);
+          player.setQualityFor('video', targetIdx);
+          console.log(`[DASH] Set initial quality: ${targetQuality} (index ${targetIdx})`);
+        }
+      });
 
       dashPlayerRef.current = player;
-
-      console.log('[DASH] Player initialized for:', movieboxVideoUrl);
-    } catch (err) {
+      console.log('[DASH] Player initialized with proxy manifest');
+    } catch (err: any) {
       console.error('[DASH] Failed to initialize player:', err);
+      setMovieboxError(`Failed to initialize DASH player: ${err?.message || err}`);
     }
 
     // Cleanup on unmount or URL change
     return () => {
       if (dashPlayerRef.current) {
-        try {
-          dashPlayerRef.current.destroy();
-        } catch (e) { /* ignore */ }
+        try { dashPlayerRef.current.destroy(); } catch (e) { /* ignore */ }
         dashPlayerRef.current = null;
       }
     };
@@ -911,7 +993,7 @@ export default function VideoPlayer({
           {isMoviebox && !movieboxLoading && !movieboxError && movieboxVideoUrl && (
             <video
               ref={videoRef}
-              key={movieboxVideoUrl}
+              key="moviebox-dash-player"
               controls
               autoPlay
               playsInline

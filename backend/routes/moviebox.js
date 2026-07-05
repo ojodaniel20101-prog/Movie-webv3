@@ -1293,4 +1293,246 @@ router.get('/proxy-download', async (req, res) => {
   }
 });
 
+// =============================================================================
+// DASH PROXY — Backend proxies MPD manifests and segments to bypass CORS
+// and inject required authentication cookies.
+// =============================================================================
+
+/**
+ * Fetch binary data (for DASH video segments which are not UTF-8 text).
+ */
+function requestBinary(method, urlStr, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const { headers = {}, timeout = REQUEST_TIMEOUT } = opts;
+    const url = new URL(urlStr);
+    const client = url.protocol === 'https:' ? https : http;
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search,
+      method: method.toUpperCase(),
+      headers,
+      timeout,
+    };
+
+    const req = client.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => { chunks.push(chunk); });
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode,
+          headers: res.headers,
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    req.end();
+  });
+}
+
+/**
+ * Resolve a potentially-relative URL against a base URL.
+ */
+function resolveUrl(url, base) {
+  if (!url) return base;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('//')) {
+    const baseProto = base.startsWith('https') ? 'https:' : 'http:';
+    return baseProto + url;
+  }
+  if (url.startsWith('/')) {
+    const baseUrl = new URL(base);
+    return `${baseUrl.protocol}//${baseUrl.host}${url}`;
+  }
+  // Relative path — resolve against base directory
+  const baseDir = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
+  return baseDir + url;
+}
+
+/**
+ * Rewrite every URL inside an MPD manifest so that *all* subsequent requests
+ * (BaseURL, SegmentTemplate media/initialization, etc.) are routed through
+ * our `/api/moviebox/dash-segment` proxy with auth cookies attached.
+ *
+ * IMPORTANT: We must NOT rewrite XML namespace URIs (xmlns, xsi:schemaLocation)
+ * because those are identifiers, not retrievable resources.
+ */
+function rewriteMpdUrls(mpdXml, originalMpdUrl, cookies) {
+  const encodedCookies = encodeURIComponent(cookies || '');
+  const proxyBase = `/api/moviebox/dash-segment`;
+
+  // Base directory of the manifest (used to resolve relative URLs)
+  const lastSlashIdx = originalMpdUrl.lastIndexOf('/');
+  const manifestBase = lastSlashIdx >= 0
+    ? originalMpdUrl.substring(0, lastSlashIdx + 1)
+    : originalMpdUrl;
+
+  let rewritten = mpdXml;
+
+  // ---- Helper: is this a URL that should NOT be rewritten? ----
+  function shouldSkipUrl(url) {
+    // Skip W3C / ISO namespace URIs — these are identifiers, not resources
+    const namespaceHosts = [
+      'www.w3.org',
+      'standards.iso.org',
+      'mpeg.chiariglione.org',
+      'www.mpeg.org',
+    ];
+    try {
+      const parsed = new URL(url);
+      if (namespaceHosts.includes(parsed.hostname)) return true;
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  // ---- 1) Rewrite absolute http(s) in element CONTENT (text between tags) ----
+  //    e.g. <BaseURL>https://cdn.com/path/</BaseURL>
+  rewritten = rewritten.replace(
+    />(https?:\/\/[^<]+)</g,
+    (match, url) => {
+      if (shouldSkipUrl(url)) return match;
+      if (url.includes('/api/moviebox/dash-segment')) return match;
+      return `>${proxyBase}?cookies=${encodedCookies}&url=${encodeURIComponent(url)}<`;
+    }
+  );
+
+  // ---- 2) Rewrite absolute http(s) in specific ATTRIBUTE values ----
+  //    Only rewrite attributes that are known to contain resource URLs:
+  //    media=, initialization=, sourceURL=, href= (in mpd BaseURL)
+  rewritten = rewritten.replace(
+    /(media|initialization|sourceURL|href)=["'](https?:\/\/[^"']+)["']/g,
+    (match, attr, url) => {
+      if (shouldSkipUrl(url)) return match;
+      if (url.includes('/api/moviebox/dash-segment')) return match;
+      return `${attr}="${proxyBase}?cookies=${encodedCookies}&url=${encodeURIComponent(url)}"`;
+    }
+  );
+
+  // ---- 3) Rewrite relative URLs in media="…" and initialization="…" ----
+  rewritten = rewritten.replace(
+    /(media|initialization)=["']((?!https?:\/\/)[^"']+)["']/g,
+    (match, attr, relUrl) => {
+      const absoluteUrl = resolveUrl(relUrl, manifestBase);
+      return `${attr}="${proxyBase}?cookies=${encodedCookies}&url=${encodeURIComponent(absoluteUrl)}"`;
+    }
+  );
+
+  // ---- 4) Rewrite relative URLs inside <BaseURL>…</BaseURL> ----
+  rewritten = rewritten.replace(
+    /<BaseURL>((?!https?:\/\/)[^<]+)<\/BaseURL>/g,
+    (match, relUrl) => {
+      const trimmed = relUrl.trim();
+      if (!trimmed) return match;
+      const absoluteUrl = resolveUrl(trimmed, manifestBase);
+      return `<BaseURL>${proxyBase}?cookies=${encodedCookies}&url=${encodeURIComponent(absoluteUrl)}</BaseURL>`;
+    }
+  );
+
+  return rewritten;
+}
+
+// ─── GET /api/moviebox/dash-manifest?url={mpdUrl}&cookies={cookieString} ──
+router.get('/dash-manifest', async (req, res) => {
+  try {
+    const { url, cookies } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    const decodedUrl = decodeURIComponent(String(url));
+    const cookieStr = cookies ? decodeURIComponent(String(cookies)) : '';
+
+    console.log(`[MovieBox] DASH manifest proxy: ${decodedUrl.substring(0, 100)}...`);
+
+    // Fetch MPD with auth cookies
+    const fetchRes = await request('GET', decodedUrl, {
+      headers: {
+        'Cookie': cookieStr,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Referer': 'https://h5-api.aoneroom.com/',
+      },
+      timeout: 30000,
+    });
+
+    if (fetchRes.statusCode < 200 || fetchRes.statusCode >= 300) {
+      return res.status(fetchRes.statusCode).json({
+        error: `Source returned HTTP ${fetchRes.statusCode}`,
+      });
+    }
+
+    // Rewrite every URL in the MPD to route through our segment proxy
+    const rewrittenMpd = rewriteMpdUrls(fetchRes.body, decodedUrl, cookieStr);
+
+    res.setHeader('Content-Type', 'application/dash+xml');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(rewrittenMpd);
+  } catch (err) {
+    console.error('[MovieBox] DASH manifest proxy error:', err.message);
+    res.status(500).json({ error: 'Failed to proxy DASH manifest', details: err.message });
+  }
+});
+
+// ─── GET /api/moviebox/dash-segment?url={segmentUrl}&cookies={cookieString} ──
+router.get('/dash-segment', async (req, res) => {
+  try {
+    const { url, cookies } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    const decodedUrl = decodeURIComponent(String(url));
+    const cookieStr = cookies ? decodeURIComponent(String(cookies)) : '';
+
+    // Fetch segment with auth cookies (binary — use requestBinary, not request())
+    const fetchRes = await requestBinary('GET', decodedUrl, {
+      headers: {
+        'Cookie': cookieStr,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Referer': 'https://h5-api.aoneroom.com/',
+      },
+      timeout: 30000,
+    });
+
+    if (fetchRes.statusCode < 200 || fetchRes.statusCode >= 300) {
+      return res.status(fetchRes.statusCode).json({
+        error: `Source returned HTTP ${fetchRes.statusCode}`,
+      });
+    }
+
+    // Determine content-type from file extension or source header
+    const ext = decodedUrl.split('.').pop()?.toLowerCase().split('?')[0];
+    const contentTypeMap = {
+      'mpd': 'application/dash+xml',
+      'm4s': 'video/iso.segment',
+      'mp4': 'video/mp4',
+      'webm': 'video/webm',
+      'init': 'video/mp4',
+      'avc': 'video/mp4',
+      'hevc': 'video/mp4',
+    };
+    const contentType = fetchRes.headers['content-type']
+      || contentTypeMap[ext]
+      || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(fetchRes.body);
+  } catch (err) {
+    console.error('[MovieBox] DASH segment proxy error:', err.message);
+    res.status(500).json({ error: 'Failed to proxy segment', details: err.message });
+  }
+});
+
 module.exports = router;
