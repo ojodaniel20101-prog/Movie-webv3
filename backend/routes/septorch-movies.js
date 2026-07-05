@@ -477,6 +477,85 @@ router.get('/trending', async (req, res) => {
 });
 
 /**
+ * GET /api/septorch/subtitle?url={subtitle_url}
+ * Proxy subtitle files (SRT, VTT, etc.) to avoid CORS issues in the browser
+ */
+router.get('/subtitle', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url || !String(url).trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Query parameter "url" is required',
+      });
+    }
+
+    const subtitleUrl = String(url).trim();
+    const parsedUrl = new URL(subtitleUrl);
+    const client = parsedUrl.protocol === 'https:' ? https : http;
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers: {
+        'Accept': '*/*',
+        'User-Agent': 'Zentrix-SubtitleProxy/1.0',
+      },
+      timeout: REQUEST_TIMEOUT,
+    };
+
+    const proxyReq = client.request(options, (proxyRes) => {
+      // Set CORS headers to allow browser to load the subtitle
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET');
+
+      // Detect content type from response or URL extension
+      const contentType = proxyRes.headers['content-type'] || '';
+      if (contentType.includes('vtt') || subtitleUrl.endsWith('.vtt')) {
+        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+      } else if (contentType.includes('srt') || subtitleUrl.endsWith('.srt')) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      } else {
+        res.setHeader('Content-Type', contentType || 'text/plain; charset=utf-8');
+      }
+
+      // Set cache header to reduce repeated requests
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+
+      res.status(proxyRes.statusCode || 200);
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('[Septorch] Subtitle proxy error:', err.message);
+      res.status(502).json({
+        success: false,
+        error: 'Failed to fetch subtitle: ' + err.message,
+      });
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      res.status(504).json({
+        success: false,
+        error: 'Subtitle request timed out',
+      });
+    });
+
+    proxyReq.end();
+  } catch (err) {
+    console.error('[Septorch] Subtitle proxy error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Subtitle proxy failed: ' + (err.message || 'Unknown error'),
+    });
+  }
+});
+
+/**
  * GET /api/septorch/health
  * Health check
  */

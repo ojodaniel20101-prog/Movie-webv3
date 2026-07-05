@@ -21,6 +21,7 @@ import {
   Server, Globe, ChevronDown,
   AlertCircle, RefreshCw, ExternalLink, Shield, Check, Loader2,
   Mic, Link2, Zap, Clapperboard, Download, Film, HardDrive,
+  Subtitles, MessageSquareOff,
   type LucideIcon,
 } from 'lucide-react';
 import type { ContentType } from '@/types';
@@ -136,9 +137,9 @@ export default function VideoPlayer({
   isAnime  = false,
 }: VideoPlayerProps) {
 
-  // Default server: anime → MegaPlay, movies/TV → VidSrc
+  // Default server: anime → AnimeHeaven, movies/TV → Septorch (direct MP4)
   const [activeServer, setActiveServer] = useState<ServerKey>(
-    isAnime ? 'animeheaven' : 'vidsrc'
+    isAnime ? 'animeheaven' : 'septorch'
   );
   const [serverMenu, setServerMenu] = useState(false);
   const [iframeKey,  setIframeKey]  = useState(0);
@@ -165,6 +166,12 @@ export default function VideoPlayer({
   const [septorchError,    setSeptorchError]    = useState<string | null>(null);
   const [septorchVideoUrl, setSeptorchVideoUrl] = useState<string | null>(null);
   const [selectedQuality,  setSelectedQuality]  = useState<string>('720p');
+
+  // ── Subtitle state ───────────────────────────────────────────────
+  const [subtitleTracks,      setSubtitleTracks]      = useState<{ label: string; srclang: string; src: string }[]>([]);
+  const [selectedSubtitle,    setSelectedSubtitle]    = useState<string>('off');
+  const [showSubtitleMenu,    setShowSubtitleMenu]    = useState(false);
+  const [subtitlesReady,      setSubtitlesReady]      = useState(false);
 
   // ── AnimeHeaven state ────────────────────────────────────────────
   const [ahUrl,         setAhUrl]         = useState<string | null>(null);
@@ -305,6 +312,26 @@ export default function VideoPlayer({
 
       setSelectedQuality(preferred.quality);
       setSeptorchVideoUrl(preferred.stream_url);
+
+      // Process subtitles - proxy them through backend to avoid CORS
+      if (streamsData.subtitles && streamsData.subtitles.length > 0) {
+        const tracks = streamsData.subtitles
+          .filter((sub: any) => sub.url && sub.language)
+          .map((sub: any) => ({
+            label: sub.language_name || sub.language,
+            srclang: sub.language,
+            src: `/api/septorch/subtitle?url=${encodeURIComponent(sub.url)}`,
+          }));
+        setSubtitleTracks(tracks);
+        // Auto-select English subtitle if available, otherwise first subtitle
+        const engTrack = tracks.find(t => t.srclang.toLowerCase().startsWith('en'));
+        setSelectedSubtitle(engTrack ? engTrack.srclang : tracks[0]?.srclang || 'off');
+        setSubtitlesReady(true);
+      } else {
+        setSubtitleTracks([]);
+        setSelectedSubtitle('off');
+        setSubtitlesReady(false);
+      }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       console.error('[VideoPlayer] Septorch resolution failed:', err);
@@ -415,6 +442,16 @@ export default function VideoPlayer({
     }
   }, [septorchData, septorchVideoUrl]);
 
+  // ── Subtitle track switching effect ──────────────────────────────
+  useEffect(() => {
+    if (!videoRef.current || !isSeptorch) return;
+    const video = videoRef.current;
+    const tracks = video.textTracks;
+    for (let i = 0; i < tracks.length; i++) {
+      tracks[i].mode = tracks[i].language === selectedSubtitle ? 'showing' : 'hidden';
+    }
+  }, [selectedSubtitle, isSeptorch, septorchVideoUrl]);
+
   // ── Effects ──────────────────────────────────────────────────────
   useEffect(() => {
     if (isAnime && isAnimeHeaven) resolveAnimeHeavenUrl();
@@ -467,6 +504,10 @@ export default function VideoPlayer({
     setSeptorchData(null);
     setSeptorchVideoUrl(null);
     setSeptorchError(null);
+    setSubtitleTracks([]);
+    setSelectedSubtitle('off');
+    setSubtitlesReady(false);
+    setShowSubtitleMenu(false);
     setAhUrl(null);
     setAhDownloadUrl(null);
     setAhError(null);
@@ -653,6 +694,77 @@ export default function VideoPlayer({
           </div>
         )}
 
+        {/* Subtitle selector (Septorch only) */}
+        {isSeptorch && subtitlesReady && subtitleTracks.length > 0 && (
+          <div className="relative">
+            <motion.button
+              onClick={() => setShowSubtitleMenu(v => !v)}
+              className="flex items-center gap-1.5 h-10 px-3 rounded-xl bg-zx-s3 border border-white/[0.08] text-xs text-gray-400 hover:text-white hover:border-white/15 transition-all"
+              whileTap={{ scale: 0.95 }}
+              title="Select subtitles"
+            >
+              {selectedSubtitle === 'off' ? <MessageSquareOff size={14} /> : <Subtitles size={14} />}
+              <span className="hidden sm:inline">
+                {selectedSubtitle === 'off' ? 'Subtitles' : subtitleTracks.find(t => t.srclang === selectedSubtitle)?.label || 'Subtitles'}
+              </span>
+              <ChevronDown size={11} className={`transition-transform ${showSubtitleMenu ? 'rotate-180' : ''}`} />
+            </motion.button>
+
+            <AnimatePresence>
+              {showSubtitleMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSubtitleMenu(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute top-full mt-2 left-0 w-48 rounded-xl overflow-hidden z-50 shadow-2xl"
+                    style={{
+                      background: 'rgba(10,10,22,0.98)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      backdropFilter: 'blur(24px)',
+                    }}
+                  >
+                    <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                      Subtitles
+                    </p>
+                    {/* Off option */}
+                    <button
+                      onClick={() => { setSelectedSubtitle('off'); setShowSubtitleMenu(false); }}
+                      className={`flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left transition-all ${
+                        selectedSubtitle === 'off'
+                          ? 'bg-primary-500/15 text-white'
+                          : 'text-gray-300 hover:bg-white/[0.06] hover:text-white'
+                      }`}
+                    >
+                      <MessageSquareOff size={13} className="flex-shrink-0" />
+                      <span className="font-medium">Off</span>
+                      {selectedSubtitle === 'off' && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
+                    </button>
+                    {/* Language options */}
+                    {subtitleTracks.map((track) => (
+                      <button
+                        key={track.srclang}
+                        onClick={() => { setSelectedSubtitle(track.srclang); setShowSubtitleMenu(false); }}
+                        className={`flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left transition-all ${
+                          selectedSubtitle === track.srclang
+                            ? 'bg-primary-500/15 text-white'
+                            : 'text-gray-300 hover:bg-white/[0.06] hover:text-white'
+                        }`}
+                      >
+                        <Subtitles size={13} className="flex-shrink-0" />
+                        <span className="font-medium">{track.label}</span>
+                        {selectedSubtitle === track.srclang && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {/* Open in new tab (iframe servers only) */}
         {streamUrl && !isSeptorch && (
           <a
@@ -819,9 +931,22 @@ export default function VideoPlayer({
               controls
               autoPlay
               playsInline
+              crossOrigin="anonymous"
               className="absolute inset-0 w-full h-full"
               style={{ background: '#000' }}
-            />
+            >
+              {/* Subtitle tracks */}
+              {subtitleTracks.map((track) => (
+                <track
+                  key={track.srclang}
+                  kind="subtitles"
+                  src={track.src}
+                  srcLang={track.srclang}
+                  label={track.label}
+                  default={selectedSubtitle === track.srclang}
+                />
+              ))}
+            </video>
           )}
 
           {/* ── Iframe (for embed-based servers) ── */}
