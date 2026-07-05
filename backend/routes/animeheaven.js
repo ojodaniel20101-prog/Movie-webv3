@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const { JSDOM } = require('jsdom');
 
 const BASE_URL = 'https://animeheaven.me';
 const SEARCH_URL = `${BASE_URL}/search.php`;
