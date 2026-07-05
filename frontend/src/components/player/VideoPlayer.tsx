@@ -1,12 +1,18 @@
 /*
-  Zentrix VideoPlayer — v3.0
+  Zentrix VideoPlayer — v3.1
+  ────────────────────────────────────────────────────────────────────
+  CHANGES v3.1:
+  ✅ Replaced MovieBox with Septorch API for direct MP4 streaming
+  ✅ Removed dash.js dependency — uses native HTML5 video
+  ✅ Direct streaming via Septorch proxy URLs (no CORS issues)
+  ✅ Download with quality selection via Septorch proxy-download
+  ✅ Simplified quality switching (just swaps video src)
   ────────────────────────────────────────────────────────────────────
   CHANGES v3:
   ✅ Fixed VidSrc: vidsrc.wiki now primary (vidsrc.pro dead → redirected to ads)
-  ✅ Replaced embed.su (dead) with MovieBox DASH streaming server
-  ✅ Added MovieBox backend integration with DASH/HLS direct playback
+  ✅ Added MovieBox DASH streaming server
   ✅ Added download functionality with quality selection
-  ✅ Server 5 now uses vidsrc.wiki mirror (was vidsrc.pro → ad redirect)
+  ✅ Server 5 now uses vidsrc.wiki mirror
 */
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -19,7 +25,6 @@ import {
 } from 'lucide-react';
 import type { ContentType } from '@/types';
 import AdBlockGuideModal from '@/components/adblock/AdBlockGuideModal';
-import { MediaPlayer } from 'dashjs';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -34,7 +39,7 @@ interface VideoPlayerProps {
   isAnime?:   boolean;
 }
 
-type ServerKey  = 'megaplay' | 'megaplay-dub' | 'vidsrc' | 'vidlink' | 'vidsrc2' | 'moviebox' | 'animeheaven';
+type ServerKey  = 'megaplay' | 'megaplay-dub' | 'vidsrc' | 'vidlink' | 'vidsrc2' | 'septorch' | 'animeheaven';
 
 interface ServerDef {
   id:          ServerKey;
@@ -55,23 +60,23 @@ interface MegaplayResponse {
   status?:   number;
 }
 
-interface MovieBoxStream {
+interface SeptorchStream {
   quality: string;
-  url: string;
-  type: string;
-  codec: string;
-  bandwidth: number;
-  cookie_string?: string;
+  resolution: number;
+  stream_url: string;
+  download_url: string;
+  source_url: string;
+  size_mb: string;
+  size_bytes: number;
+  id: string;
 }
 
-interface MovieBoxResponse {
+interface SeptorchResponse {
   success: boolean;
   movie_id: string;
-  title: string;
-  streams: MovieBoxStream[];
-  subtitles: { language: string; url: string }[];
-  download_options: MovieBoxStream[];
-  streaming_format: string;
+  detail_path: string;
+  streams: SeptorchStream[];
+  subtitles: { language: string; language_name: string; url: string }[];
   source: string;
 }
 
@@ -83,7 +88,7 @@ const ALL_SERVERS: ServerDef[] = [
   { id: 'vidsrc',       label: 'Server 3', icon: Clapperboard, iconColor: '#7B6FF0', description: 'Primary · Reliable'                     },
   { id: 'vidlink',      label: 'Server 4', icon: Link2,        iconColor: '#2DD4BF', description: 'Fast · Recommended',  adNote: true        },
   { id: 'vidsrc2',      label: 'Server 5', icon: Zap,          iconColor: '#FCD34D', description: 'VidSrc Mirror · HD'                     },
-  { id: 'moviebox',     label: 'Server 6', icon: HardDrive,    iconColor: '#FB7185', description: 'MovieBox · DASH Backup', directPlay: true },
+  { id: 'septorch',     label: 'Server 6', icon: HardDrive,    iconColor: '#FB7185', description: 'Septorch · Direct MP4 Stream', directPlay: true },
 ];
 
 // ─── Synchronous URL builders (iframe-based servers) ────────────────
@@ -109,12 +114,10 @@ function buildStaticUrl(
       return `https://vidlink.pro/tv/${tmdbId}/${s}/${e}?autoplay=true&nextbutton=true`;
 
     case 'vidsrc2':
-      // FIXED: vidsrc.pro redirects to ads — use vidsrc.wiki as working mirror
       if (type === 'movie') return `https://vidsrc.wiki/embed/movie/${tmdbId}?server=bx`;
       if (type === 'anime' && anilistId) return `https://vidsrc.wiki/embed/tv/${anilistId}/${s}/${e}?server=bx`;
       return `https://vidsrc.wiki/embed/tv/${tmdbId}/${s}/${e}?server=bx`;
 
-    // moviebox: handled by async resolution (direct video playback)
     default:
       return '';
   }
@@ -153,14 +156,14 @@ export default function VideoPlayer({
   const isMegaplay    = activeServer === 'megaplay' || activeServer === 'megaplay-dub';
   const isAnimeHeaven = activeServer === 'animeheaven';
   const isVidlink     = activeServer === 'vidlink';
-  const isMoviebox    = activeServer === 'moviebox';
+  const isSeptorch    = activeServer === 'septorch';
   const megaplayLang: 'sub' | 'dub' = activeServer === 'megaplay-dub' ? 'dub' : 'sub';
 
-  // ── MovieBox async resolution state ──────────────────────────────
-  const [movieboxData,     setMovieboxData]     = useState<MovieBoxResponse | null>(null);
-  const [movieboxLoading,  setMovieboxLoading]  = useState(false);
-  const [movieboxError,    setMovieboxError]    = useState<string | null>(null);
-  const [movieboxVideoUrl, setMovieboxVideoUrl] = useState<string | null>(null);
+  // ── Septorch async resolution state ──────────────────────────────
+  const [septorchData,     setSeptorchData]     = useState<SeptorchResponse | null>(null);
+  const [septorchLoading,  setSeptorchLoading]  = useState(false);
+  const [septorchError,    setSeptorchError]    = useState<string | null>(null);
+  const [septorchVideoUrl, setSeptorchVideoUrl] = useState<string | null>(null);
   const [selectedQuality,  setSelectedQuality]  = useState<string>('720p');
 
   // ── AnimeHeaven state ────────────────────────────────────────────
@@ -174,14 +177,8 @@ export default function VideoPlayer({
   // ── Download state ───────────────────────────────────────────────
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
-  // ── DASH player ref ──────────────────────────────────────────────
+  // ── Video ref for direct play servers ────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const dashPlayerRef = useRef<any>(null);
-  const selectedQualityRef = useRef<string>(selectedQuality);
-  const qualityIndexMapRef = useRef<Map<string, number>>(new Map());
-
-  // Keep ref in sync with state so event handlers see current value
-  selectedQualityRef.current = selectedQuality;
 
   // ── VidLink postMessage event listener ───────────────────────────
   useEffect(() => {
@@ -190,7 +187,6 @@ export default function VideoPlayer({
       if (event.origin !== 'https://vidlink.pro') return;
       if (event.data?.type !== 'PLAYER_EVENT') return;
       const { event: evtName, currentTime, duration } = event.data.data ?? {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((import.meta as any).env?.DEV) {
         console.debug(`[Server 4] ${evtName} @ ${currentTime?.toFixed(1)}s / ${duration?.toFixed(1)}s`);
       }
@@ -228,9 +224,6 @@ export default function VideoPlayer({
       episode:   String(episode),
       lang:      megaplayLang,
     });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
 
     fetch(`/api/megaplay/stream?${params}`, { signal: abortRef.current.signal })
       .then(r => {
@@ -241,9 +234,6 @@ export default function VideoPlayer({
         if (!data?.url) throw new Error('Backend returned no URL');
         setMegaplayUrl(data.url);
         setMegaplayMeta({ method: data.method, warning: data.warning });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
         setIframeKey(k => k + 1);
       })
       .catch(err => {
@@ -254,91 +244,75 @@ export default function VideoPlayer({
       .finally(() => setMegaplayLoading(false));
   }, [isAnime, isMegaplay, anilistId, episode, megaplayLang]);
 
-  // ── MovieBox resolution ──────────────────────────────────────────
-  const resolveMovieboxUrl = useCallback(async () => {
-    if (!isMoviebox) return;
+  // ── Septorch resolution ──────────────────────────────────────────
+  const resolveSeptorchUrl = useCallback(async () => {
+    if (!isSeptorch || !title) return;
 
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
-    setMovieboxLoading(true);
-    setMovieboxData(null);
-    setMovieboxError(null);
-    setMovieboxVideoUrl(null);
+    setSeptorchLoading(true);
+    setSeptorchData(null);
+    setSeptorchError(null);
+    setSeptorchVideoUrl(null);
     setHasError(false);
 
     try {
-      // For movies, search MovieBox by title first to get the moviebox ID
-      // For now, try demo movie IDs that match known titles
-      const demoIds: Record<string, string> = {
-        'Avatar': '1008009424004338096',
-        'Inception': '1008009424004338098',
-        'The Matrix': '1008009424004338099',
-        'The Dark Knight': '1008009424004338100',
-      };
+      // Step 1: Search for the movie by title
+      const searchRes = await fetch(
+        `/api/septorch/search?q=${encodeURIComponent(title)}`,
+        { signal: abortRef.current.signal }
+      );
+      if (!searchRes.ok) throw new Error(`Search failed: HTTP ${searchRes.status}`);
+      const searchData = await searchRes.json();
 
-      let movieId = demoIds[title || ''];
-
-      // If no direct match, try searching
-      if (!movieId && title) {
-        try {
-          const searchRes = await fetch(`/api/moviebox/search?q=${encodeURIComponent(title)}`, {
-            signal: abortRef.current.signal,
-          });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-          const searchData = await searchRes.json();
-          if (searchData.results?.length > 0) {
-            movieId = searchData.results[0].id;
-          }
-        } catch (e) {
-          console.log('[MovieBox] Search failed, trying fallback ID');
-        }
+      if (!searchData.success || !searchData.results?.length) {
+        throw new Error('No results found for this title');
       }
 
-      // Fallback to Avatar demo ID
-      if (!movieId) {
-        movieId = '1008009424004338096';
+      // Find best match (prefer movies for movie type, tv for tv type)
+      const expectedType = type === 'movie' ? 1 : 2;
+      let match = searchData.results.find((r: any) =>
+        r.subject_type === expectedType
+      ) || searchData.results[0];
+
+      const movieId = match.id;
+      const detailPath = match.detail_path;
+
+      if (!movieId || !detailPath) {
+        throw new Error('Invalid search result: missing id or detailPath');
       }
 
-      const res = await fetch(`/api/moviebox/streams?id=${movieId}`, {
-        signal: abortRef.current.signal,
-      });
-      } catch (e) {
-        console.log('updateSettings not available');
+      // Step 2: Get streams
+      const streamsRes = await fetch(
+        `/api/septorch/streams?id=${movieId}&detailPath=${encodeURIComponent(detailPath)}`,
+        { signal: abortRef.current.signal }
+      );
+      if (!streamsRes.ok) throw new Error(`Streams failed: HTTP ${streamsRes.status}`);
+      const streamsData: SeptorchResponse = await streamsRes.json();
+
+      if (!streamsData.success || !streamsData.streams?.length) {
+        throw new Error('No streams available for this title');
       }
 
-      if (!res.ok) throw new Error(`Backend returned HTTP ${res.status}`);
+      setSeptorchData(streamsData);
 
-      const data: MovieBoxResponse = await res.json();
-      if (!data.success) throw new Error('Backend returned error');
+      // Auto-select best quality (prefer 720p, then 1080p, then best available)
+      const streams = streamsData.streams;
+      const preferred = streams.find((s: SeptorchStream) => s.quality === '720p')
+        || streams.find((s: SeptorchStream) => s.quality === '1080p')
+        || streams[0];
 
-      setMovieboxData(data);
-
-      // Auto-select best quality stream
-      if (data.streams && data.streams.length > 0) {
-        // Sort by bandwidth descending
-        const sorted = [...data.streams].sort((a, b) =>
-          (b.bandwidth || 0) - (a.bandwidth || 0)
-        );
-
-        // Pick 720p or best available
-        const preferred = sorted.find(s => s.quality === '720p')
-          || sorted.find(s => s.quality === '1080p')
-          || sorted[0];
-
-        setSelectedQuality(preferred.quality);
-        setMovieboxVideoUrl(preferred.url);
-      }
+      setSelectedQuality(preferred.quality);
+      setSeptorchVideoUrl(preferred.stream_url);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
-      console.error('[VideoPlayer] MovieBox resolution failed:', err);
-      setMovieboxError(err.message || 'Could not resolve MovieBox stream.');
+      console.error('[VideoPlayer] Septorch resolution failed:', err);
+      setSeptorchError(err.message || 'Could not resolve stream. Try another server.');
     } finally {
-      setMovieboxLoading(false);
+      setSeptorchLoading(false);
     }
-  }, [isMoviebox, title]);
+  }, [isSeptorch, title, type]);
 
   // ── AnimeHeaven resolution ────────────────────────────────────────
   const resolveAnimeHeavenUrl = useCallback(async () => {
@@ -370,9 +344,6 @@ export default function VideoPlayer({
         episode:  epNum,
         ep_id:    ep.ep_id || '',
       });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
       const srcRes = await fetch(`/api/anime/source?${params}`);
       const srcData = await srcRes.json();
       if (!srcData.success || !srcData.streamUrl) throw new Error('No stream found');
@@ -397,9 +368,6 @@ export default function VideoPlayer({
         episode:  String(episode),
         ep_id:    ahEpId,
       });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
       const res = await fetch(`/api/anime/source?${params}`);
       const data = await res.json();
       if (data.success && data.downloadUrl) {
@@ -422,223 +390,57 @@ export default function VideoPlayer({
     }
   }, [ahAnimeId, ahEpId, episode, title]);
 
-  // ── MovieBox download handler ────────────────────────────────────
-  // Uses backend proxy to bypass cross-origin download restrictions
-  const handleMovieboxDownload = useCallback(async (quality: string) => {
-    if (!movieboxData?.download_options?.length) return;
+  // ── Septorch download handler ────────────────────────────────────
+  const handleSeptorchDownload = useCallback((quality: string) => {
+    if (!septorchData?.streams?.length) return;
 
-    const option = movieboxData.download_options.find(o => o.quality === quality)
-      || movieboxData.download_options[0];
+    const stream = septorchData.streams.find((s: SeptorchStream) => s.quality === quality)
+      || septorchData.streams[0];
 
-    if (!option?.url) return;
+    if (!stream?.download_url) return;
 
-    const fileName = `${(movieboxData.title || title || 'movie').replace(/[^a-zA-Z0-9\s]/g, '_')}_${quality}.mp4`;
+    // Open the proxy-download URL in a new tab (triggers download)
+    window.open(stream.download_url, '_blank');
+  }, [septorchData]);
 
-    try {
-      // Use backend proxy to fetch and serve the file with proper download headers
-      const proxyUrl = `/api/moviebox/proxy-download?url=${encodeURIComponent(option.url)}&filename=${encodeURIComponent(fileName)}`;
-
-      // Trigger download via iframe (avoids page navigation)
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = proxyUrl;
-      document.body.appendChild(iframe);
-
-      // Remove iframe after download starts
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 30000);
-    } catch (err) {
-      console.error('[Download] Proxy download failed, falling back:', err);
-      // Fallback: try direct download (may redirect for cross-origin)
-      const a = document.createElement('a');
-      a.href = option.url;
-      a.download = fileName;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-  }, [movieboxData, title]);
-
-  // ── MovieBox quality change ──────────────────────────────────────
-  const handleMovieboxQualityChange = useCallback((quality: string) => {
+  // ── Septorch quality change ──────────────────────────────────────
+  const handleSeptorchQualityChange = useCallback((quality: string) => {
     setSelectedQuality(quality);
 
-    // Use dash.js internal quality switching (same MPD, different Representation)
-    if (dashPlayerRef.current) {
-      const idx = qualityIndexMapRef.current.get(quality);
-      if (idx !== undefined) {
-        try {
-          dashPlayerRef.current.setAutoSwitchQualityFor('video', false);
-          dashPlayerRef.current.setQualityFor('video', idx);
-          console.log(`[DASH] Switched to quality: ${quality} (index ${idx})`);
-        } catch (e) {
-          console.error('[DASH] Quality switch failed:', e);
-        }
-        return;
+    if (septorchData?.streams) {
+      const stream = septorchData.streams.find((s: SeptorchStream) => s.quality === quality);
+      if (stream && stream.stream_url !== septorchVideoUrl) {
+        setSeptorchVideoUrl(stream.stream_url);
       }
     }
+  }, [septorchData, septorchVideoUrl]);
 
-    // Fallback: if DASH player isn't ready or index unknown, switch URL
-    // (for HLS/MP4 streams where each quality has a different URL)
-    if (movieboxData?.streams) {
-      const stream = movieboxData.streams.find(s => s.quality === quality);
-      if (stream && stream.url !== movieboxVideoUrl) {
-        setMovieboxVideoUrl(stream.url);
-      }
-    }
-  }, [movieboxData, movieboxVideoUrl]);
-
+  // ── Effects ──────────────────────────────────────────────────────
   useEffect(() => {
     if (isAnime && isAnimeHeaven) resolveAnimeHeavenUrl();
-  }, [isAnime, isAnimeHeaven, title, episode]);
+  }, [isAnime, isAnimeHeaven, title, episode, resolveAnimeHeavenUrl]);
 
   useEffect(() => {
     if (isAnime && isMegaplay) {
       resolveMegaplayUrl();
     }
     return () => abortRef.current?.abort();
-  }, [isAnime, isMegaplay, anilistId, episode, megaplayLang]);
+  }, [isAnime, isMegaplay, anilistId, episode, megaplayLang, resolveMegaplayUrl]);
 
   useEffect(() => {
-    if (isMoviebox) {
-      resolveMovieboxUrl();
+    if (isSeptorch) {
+      resolveSeptorchUrl();
     }
     return () => abortRef.current?.abort();
-  }, [isMoviebox, resolveMovieboxUrl]);
-
-  // ── Initialize DASH player for MovieBox streams ──────────────────
-  useEffect(() => {
-    if (!isMoviebox || !movieboxVideoUrl || !videoRef.current) return;
-    if (!movieboxData?.streams?.length) return;
-
-    // Check if this is a DASH stream
-    const isDash = movieboxVideoUrl.endsWith('.mpd') ||
-      movieboxData?.streaming_format === 'dash' ||
-      movieboxData?.streams?.[0]?.type === 'dash';
-
-    if (!isDash) return; // Let native video handle HLS/MP4
-
-    // Destroy previous DASH player instance
-    if (dashPlayerRef.current) {
-      try { dashPlayerRef.current.destroy(); } catch (e) { /* ignore */ }
-      dashPlayerRef.current = null;
-    }
-
-    // Reset quality index map for new stream
-    qualityIndexMapRef.current = new Map();
-
-    try {
-      // Get auth cookies from the first stream for proxy authentication
-      const firstStream = movieboxData.streams[0];
-      const cookieString = firstStream?.cookie_string || '';
-
-      // Build proxied manifest URL — backend rewrites all segment URLs
-      const proxyManifestUrl = `/api/moviebox/dash-manifest?url=${encodeURIComponent(movieboxVideoUrl)}&cookies=${encodeURIComponent(cookieString)}`;
-
-      const player = new MediaPlayer();
-
-      // Configure: disable auto bitrate switching (we handle quality manually)
-      // Configure bitrate settings
-      try {
-        player.updateSettings({
-          streaming: {
-            abr: { autoSwitchBitrate: { video: false } },
-          buffer: { fastSwitchEnabled: true },
-        },
-      });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-
-      player.initialize(videoRef.current, proxyManifestUrl, true);
-
-      // ── Error handling ──────────────────────────────
-      player.on('error', (e: any) => {
-        console.error('[DASH] Player error:', e);
-        const errMsg = e?.error?.message || e?.error || 'DASH playback failed';
-        setMovieboxError(`Playback error: ${errMsg}. Try reloading or switching server.`);
-      });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-
-      player.on('manifestError', (e: any) => {
-        console.error('[DASH] Manifest error:', e);
-        setMovieboxError('Failed to load DASH manifest. The stream may be unavailable.');
-      });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-
-      player.on('segmentLoadingFailed', (e: any) => {
-        console.error('[DASH] Segment loading failed:', e);
-      });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-
-      // ── Quality mapping + initial selection ─────────
-      player.on('streamInitialized', () => {
-        console.log('[DASH] Stream initialized');
-
-        const bitrateList = player.getBitrateInfoListFor('video');
-        console.log('[DASH] Available bitrates:', bitrateList);
-
-        const newMap = new Map<string, number>();
-        movieboxData.streams.forEach((stream) => {
-          const height = parseInt(stream.quality.replace('p', ''), 10);
-          // Match by height (±10px tolerance) or bandwidth proximity
-          const matchIdx = bitrateList.findIndex((bi: any) =>
-            Math.abs((bi.height || 0) - height) < 10
-          );
-          if (matchIdx >= 0) {
-            newMap.set(stream.quality, matchIdx);
-          }
-        });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-        qualityIndexMapRef.current = newMap;
-        console.log('[DASH] Quality index map:', Object.fromEntries(newMap));
-
-        // Apply currently-selected quality
-        const targetQuality = selectedQualityRef.current;
-        const targetIdx = newMap.get(targetQuality);
-        if (targetIdx !== undefined) {
-          player.setAutoSwitchQualityFor('video', false);
-          player.setQualityFor('video', targetIdx);
-          console.log(`[DASH] Set initial quality: ${targetQuality} (index ${targetIdx})`);
-        }
-      });
-      } catch (e) {
-        console.log('updateSettings not available');
-      }
-
-      dashPlayerRef.current = player;
-      console.log('[DASH] Player initialized with proxy manifest');
-    } catch (err: any) {
-      console.error('[DASH] Failed to initialize player:', err);
-      setMovieboxError(`Failed to initialize DASH player: ${err?.message || err}`);
-    }
-
-    // Cleanup on unmount or URL change
-    return () => {
-      if (dashPlayerRef.current) {
-        try { dashPlayerRef.current.destroy(); } catch (e) { /* ignore */ }
-        dashPlayerRef.current = null;
-      }
-    };
-  }, [isMoviebox, movieboxVideoUrl, movieboxData]);
+  }, [isSeptorch, resolveSeptorchUrl]);
 
   // ── Final stream URL ─────────────────────────────────────────────
   const streamUrl = useMemo(() => {
     if (isAnime && isMegaplay)     return megaplayUrl || '';
     if (isAnime && isAnimeHeaven)  return ahUrl || '';
-    if (isMoviebox)                return movieboxVideoUrl || '';
+    if (isSeptorch)                return septorchVideoUrl || '';
     return buildStaticUrl(activeServer, tmdbId, anilistId, type, season, episode);
-  }, [isAnime, isMegaplay, isAnimeHeaven, isMoviebox, megaplayUrl, ahUrl, movieboxVideoUrl, activeServer, tmdbId, anilistId, type, season, episode]);
+  }, [isAnime, isMegaplay, isAnimeHeaven, isSeptorch, megaplayUrl, ahUrl, septorchVideoUrl, activeServer, tmdbId, anilistId, type, season, episode]);
 
   const currentServer = ALL_SERVERS.find(s => s.id === activeServer)!;
 
@@ -652,43 +454,24 @@ export default function VideoPlayer({
     setHasError(false);
     if (isAnime && isMegaplay)    { resolveMegaplayUrl(); }
     else if (isAnime && isAnimeHeaven) { resolveAnimeHeavenUrl(); }
-    else if (isMoviebox)          { resolveMovieboxUrl(); }
+    else if (isSeptorch)          { resolveSeptorchUrl(); }
     else { setIframeKey(k => k + 1); }
   };
 
   const changeServer = (id: ServerKey) => {
-    // Destroy DASH player when switching away from MovieBox
-    if (activeServer === 'moviebox' && dashPlayerRef.current) {
-      try {
-        dashPlayerRef.current.destroy();
-      } catch (e) { /* ignore */ }
-      dashPlayerRef.current = null;
-    }
     setActiveServer(id);
     setServerMenu(false);
     setHasError(false);
     setMegaplayUrl(null);
     setMegaplayError(null);
-    setMovieboxData(null);
-    setMovieboxVideoUrl(null);
-    setMovieboxError(null);
+    setSeptorchData(null);
+    setSeptorchVideoUrl(null);
+    setSeptorchError(null);
     setAhUrl(null);
     setAhDownloadUrl(null);
     setAhError(null);
     setIframeKey(k => k + 1);
   };
-
-  // Cleanup DASH player on unmount
-  useEffect(() => {
-    return () => {
-      if (dashPlayerRef.current) {
-        try {
-          dashPlayerRef.current.destroy();
-        } catch (e) { /* ignore */ }
-        dashPlayerRef.current = null;
-      }
-    };
-  }, []);
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -765,7 +548,7 @@ export default function VideoPlayer({
                           )}
                           {sv.directPlay && (
                             <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold leading-none">
-                              DASH
+                              MP4
                             </span>
                           )}
                         </div>
@@ -784,7 +567,7 @@ export default function VideoPlayer({
                     </p>
                     <p className="text-[10px] text-gray-600 leading-relaxed flex items-start gap-1.5 mt-1">
                       <Server size={11} className="text-primary-400 flex-shrink-0 mt-px" />
-                      Server 6: MovieBox DASH streaming with download support
+                      Server 6: Septorch direct MP4 stream with download support
                     </p>
                   </div>
                 </motion.div>
@@ -796,11 +579,11 @@ export default function VideoPlayer({
         {/* Reload */}
         <motion.button
           onClick={reload}
-          disabled={megaplayLoading || movieboxLoading}
+          disabled={megaplayLoading || septorchLoading}
           className="flex items-center gap-1.5 h-10 px-3 rounded-xl bg-zx-s3 border border-white/[0.08] text-xs text-gray-500 hover:text-white hover:border-white/15 transition-all disabled:opacity-40"
           whileTap={{ scale: 0.95 }}
         >
-          <RefreshCw size={14} className={megaplayLoading || movieboxLoading ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={megaplayLoading || septorchLoading ? 'animate-spin' : ''} />
           <span className="hidden sm:inline">Reload</span>
         </motion.button>
 
@@ -817,8 +600,8 @@ export default function VideoPlayer({
           </motion.button>
         )}
 
-        {/* Download button with quality selector (MovieBox) */}
-        {isMoviebox && movieboxData?.download_options && movieboxData.download_options.length > 0 && (
+        {/* Download button with quality selector (Septorch) */}
+        {isSeptorch && septorchData?.streams && septorchData.streams.length > 0 && (
           <div className="relative">
             <motion.button
               onClick={() => setShowDownloadMenu(v => !v)}
@@ -840,7 +623,7 @@ export default function VideoPlayer({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.96 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute top-full mt-2 left-0 w-48 rounded-xl overflow-hidden z-50 shadow-2xl"
+                    className="absolute top-full mt-2 left-0 w-52 rounded-xl overflow-hidden z-50 shadow-2xl"
                     style={{
                       background: 'rgba(10,10,22,0.98)',
                       border: '1px solid rgba(255,255,255,0.1)',
@@ -850,16 +633,16 @@ export default function VideoPlayer({
                     <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">
                       Select Quality
                     </p>
-                    {movieboxData.download_options.map(opt => (
+                    {septorchData.streams.map((stream: SeptorchStream) => (
                       <button
-                        key={opt.quality}
-                        onClick={() => { handleMovieboxDownload(opt.quality); setShowDownloadMenu(false); }}
+                        key={stream.quality}
+                        onClick={() => { handleSeptorchDownload(stream.quality); setShowDownloadMenu(false); }}
                         className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all"
                       >
                         <Film size={12} className="text-emerald-400 flex-shrink-0" />
-                        <span className="font-medium">{opt.quality}</span>
-                        <span className="text-[10px] text-gray-600 ml-auto">
-                          {opt.type?.toUpperCase()}
+                        <span className="font-medium">{stream.quality}</span>
+                        <span className="text-[10px] text-gray-500 ml-1">
+                          {stream.size_mb} MB
                         </span>
                       </button>
                     ))}
@@ -871,7 +654,7 @@ export default function VideoPlayer({
         )}
 
         {/* Open in new tab (iframe servers only) */}
-        {streamUrl && !isMoviebox && (
+        {streamUrl && !isSeptorch && (
           <a
             href={streamUrl}
             target="_blank"
@@ -968,12 +751,12 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {/* ── MovieBox loading ── */}
-          {isMoviebox && movieboxLoading && (
+          {/* ── Septorch loading ── */}
+          {isSeptorch && septorchLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zx-s2">
               <Loader2 size={40} className="text-emerald-400 animate-spin" />
               <div className="text-center">
-                <p className="text-white font-semibold text-sm">Loading from MovieBox…</p>
+                <p className="text-white font-semibold text-sm">Loading from Septorch…</p>
                 <p className="text-gray-500 text-xs mt-1">
                   {title ? `Searching: "${title}"` : 'Resolving streams…'}
                 </p>
@@ -981,18 +764,18 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {/* ── MovieBox error ── */}
-          {isMoviebox && !movieboxLoading && movieboxError && (
+          {/* ── Septorch error ── */}
+          {isSeptorch && !septorchLoading && septorchError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zx-s2 p-6">
               <AlertCircle size={44} className="text-red-500/70" />
               <div className="text-center">
-                <p className="text-white font-semibold">MovieBox failed</p>
+                <p className="text-white font-semibold">Septorch failed</p>
                 <p className="text-gray-500 text-sm mt-1 max-w-xs leading-relaxed">
-                  {movieboxError}
+                  {septorchError}
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap justify-center">
-                <button onClick={() => resolveMovieboxUrl()} className="btn-secondary text-sm py-2 px-4 flex items-center gap-1.5">
+                <button onClick={() => resolveSeptorchUrl()} className="btn-secondary text-sm py-2 px-4 flex items-center gap-1.5">
                   <RefreshCw size={13} /> Retry
                 </button>
                 <button onClick={() => changeServer('vidsrc')} className="btn-primary text-sm py-2 px-4">
@@ -1003,7 +786,7 @@ export default function VideoPlayer({
           )}
 
           {/* ── Generic iframe error ── */}
-          {hasError && !megaplayLoading && !movieboxLoading && (
+          {hasError && !megaplayLoading && !septorchLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zx-s2 p-6">
               <AlertCircle size={44} className="text-gray-600" />
               <div className="text-center">
@@ -1027,11 +810,12 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {/* ── MovieBox DASH/native video player ── */}
-          {isMoviebox && !movieboxLoading && !movieboxError && movieboxVideoUrl && (
+          {/* ── Septorch native video player ── */}
+          {isSeptorch && !septorchLoading && !septorchError && septorchVideoUrl && (
             <video
               ref={videoRef}
-              key="moviebox-dash-player"
+              key={septorchVideoUrl}
+              src={septorchVideoUrl}
               controls
               autoPlay
               playsInline
@@ -1041,7 +825,7 @@ export default function VideoPlayer({
           )}
 
           {/* ── Iframe (for embed-based servers) ── */}
-          {!isMoviebox && !isAnimeHeaven && streamUrl && !hasError && !megaplayLoading && !megaplayError && (
+          {!isSeptorch && !isAnimeHeaven && streamUrl && !hasError && !megaplayLoading && !megaplayError && (
             <iframe
               key={iframeKey}
               src={streamUrl}
@@ -1059,7 +843,7 @@ export default function VideoPlayer({
           )}
 
           {/* Status badge */}
-          {!megaplayLoading && !movieboxLoading && (
+          {!megaplayLoading && !septorchLoading && (
             <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10 text-[10px] text-gray-400 font-medium z-10 pointer-events-none">
               <Shield size={9} className="text-green-500" />
               <currentServer.icon size={10} style={{ color: currentServer.iconColor }} />
@@ -1079,9 +863,9 @@ export default function VideoPlayer({
                       : <Check size={9} />}
                 </span>
               )}
-              {isMoviebox && movieboxData && (
+              {isSeptorch && septorchData && (
                 <span className="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">
-                  DASH
+                  MP4
                 </span>
               )}
             </div>
@@ -1089,16 +873,16 @@ export default function VideoPlayer({
         </div>
       </div>
 
-      {/* ── MovieBox quality selector ───────────────────────────── */}
-      {isMoviebox && movieboxData?.streams && movieboxData.streams.length > 0 && (
+      {/* ── Septorch quality selector ───────────────────────────── */}
+      {isSeptorch && septorchData?.streams && septorchData.streams.length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
           <HardDrive size={14} className="text-emerald-400 flex-shrink-0" />
           <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
             <span className="text-[11px] text-emerald-400/80 font-medium">Quality:</span>
-            {movieboxData.streams.map(stream => (
+            {septorchData.streams.map((stream: SeptorchStream) => (
               <button
                 key={stream.quality}
-                onClick={() => handleMovieboxQualityChange(stream.quality)}
+                onClick={() => handleSeptorchQualityChange(stream.quality)}
                 className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                   selectedQuality === stream.quality
                     ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
@@ -1106,6 +890,7 @@ export default function VideoPlayer({
                 }`}
               >
                 {stream.quality}
+                <span className="text-[9px] text-gray-600 ml-1">({stream.size_mb}MB)</span>
               </button>
             ))}
           </div>
