@@ -519,7 +519,7 @@ export default function VideoPlayer({
       // Build proxied manifest URL — backend rewrites all segment URLs
       const proxyManifestUrl = `/api/moviebox/dash-manifest?url=${encodeURIComponent(movieboxVideoUrl)}&cookies=${encodeURIComponent(cookieString)}`;
 
-      const player = MediaPlayer.create();
+      const player = new MediaPlayer();
 
       // Configure: disable auto bitrate switching (we handle quality manually)
       player.updateSettings({
