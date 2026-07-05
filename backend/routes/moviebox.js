@@ -1293,4 +1293,4 @@ router.get('/proxy-download', async (req, res) => {
   }
 });
 
-module.exports = { router, MovieBoxScraper };
+module.exports = router;
