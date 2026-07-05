@@ -228,6 +228,9 @@ export default function VideoPlayer({
       episode:   String(episode),
       lang:      megaplayLang,
     });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
     fetch(`/api/megaplay/stream?${params}`, { signal: abortRef.current.signal })
       .then(r => {
@@ -238,6 +241,9 @@ export default function VideoPlayer({
         if (!data?.url) throw new Error('Backend returned no URL');
         setMegaplayUrl(data.url);
         setMegaplayMeta({ method: data.method, warning: data.warning });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
         setIframeKey(k => k + 1);
       })
       .catch(err => {
@@ -279,6 +285,9 @@ export default function VideoPlayer({
           const searchRes = await fetch(`/api/moviebox/search?q=${encodeURIComponent(title)}`, {
             signal: abortRef.current.signal,
           });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
           const searchData = await searchRes.json();
           if (searchData.results?.length > 0) {
             movieId = searchData.results[0].id;
@@ -296,6 +305,9 @@ export default function VideoPlayer({
       const res = await fetch(`/api/moviebox/streams?id=${movieId}`, {
         signal: abortRef.current.signal,
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
       if (!res.ok) throw new Error(`Backend returned HTTP ${res.status}`);
 
@@ -358,6 +370,9 @@ export default function VideoPlayer({
         episode:  epNum,
         ep_id:    ep.ep_id || '',
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
       const srcRes = await fetch(`/api/anime/source?${params}`);
       const srcData = await srcRes.json();
       if (!srcData.success || !srcData.streamUrl) throw new Error('No stream found');
@@ -382,6 +397,9 @@ export default function VideoPlayer({
         episode:  String(episode),
         ep_id:    ahEpId,
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
       const res = await fetch(`/api/anime/source?${params}`);
       const data = await res.json();
       if (data.success && data.downloadUrl) {
@@ -522,12 +540,17 @@ export default function VideoPlayer({
       const player = new MediaPlayer();
 
       // Configure: disable auto bitrate switching (we handle quality manually)
-      player.updateSettings({
-        streaming: {
-          abr: { autoSwitchBitrate: { video: false } },
+      // Configure bitrate settings
+      try {
+        player.updateSettings({
+          streaming: {
+            abr: { autoSwitchBitrate: { video: false } },
           buffer: { fastSwitchEnabled: true },
         },
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
       player.initialize(videoRef.current, proxyManifestUrl, true);
 
@@ -537,15 +560,24 @@ export default function VideoPlayer({
         const errMsg = e?.error?.message || e?.error || 'DASH playback failed';
         setMovieboxError(`Playback error: ${errMsg}. Try reloading or switching server.`);
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
       player.on('manifestError', (e: any) => {
         console.error('[DASH] Manifest error:', e);
         setMovieboxError('Failed to load DASH manifest. The stream may be unavailable.');
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
       player.on('segmentLoadingFailed', (e: any) => {
         console.error('[DASH] Segment loading failed:', e);
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
       // ── Quality mapping + initial selection ─────────
       player.on('streamInitialized', () => {
@@ -565,6 +597,9 @@ export default function VideoPlayer({
             newMap.set(stream.quality, matchIdx);
           }
         });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
         qualityIndexMapRef.current = newMap;
         console.log('[DASH] Quality index map:', Object.fromEntries(newMap));
 
@@ -577,6 +612,9 @@ export default function VideoPlayer({
           console.log(`[DASH] Set initial quality: ${targetQuality} (index ${targetIdx})`);
         }
       });
+      } catch (e) {
+        console.log('updateSettings not available');
+      }
 
       dashPlayerRef.current = player;
       console.log('[DASH] Player initialized with proxy manifest');
