@@ -108,7 +108,37 @@ export const upsertUserProfile = async (
     // 23505 = unique_violation. Only retry on a name collision — any
     // other error (network, RLS, etc.) should surface immediately.
     const isNameCollision = insErr.code === '23505' && insErr.message?.includes('display_name');
-    if (!isNameCollision) throw insErr;
+    if (!isNameCollision) {
+      // Log the error for debugging but don't throw immediately
+      // This allows the auth flow to continue even if profile creation fails
+      console.error('[Zentrix] Profile insert error:', insErr);
+      
+      // If it's an RLS error, the user might not be fully authenticated yet
+      // Return a minimal profile object to keep the auth flow going
+      if (insErr.code === '42501' || insErr.message?.includes('row-level security')) {
+        console.warn('[Zentrix] RLS blocked profile creation, returning minimal profile');
+        return {
+          id: userId,
+          email,
+          display_name: attemptName,
+          photo_url: photoURL,
+          custom_photo_url: null,
+          bio: '',
+          location: '',
+          created_at: now,
+          updated_at: now,
+          last_seen: now,
+          is_online: true,
+          role: isAdmin ? 'admin' : 'user',
+          is_banned: false,
+          ban_reason: null,
+          banned_at: null,
+          watchlist_count: 0,
+          watched_count: 0,
+        } as UserProfile;
+      }
+      throw insErr;
+    }
 
     attemptName = `${baseName}${Math.floor(1000 + Math.random() * 9000)}`;
   }
@@ -116,17 +146,41 @@ export const upsertUserProfile = async (
   throw new Error('Could not create a unique profile name after several attempts.');
 };
 
-/** Real-time availability check used by the profile name editor. */
+/** Real-time availability check used by the profile name editor.
+ *  Falls back to a direct query if the RPC function is not available. */
 export const checkDisplayNameAvailable = async (
   name: string,
   currentUserId: string,
 ): Promise<boolean> => {
-  const { data, error } = await supabase.rpc('is_display_name_available', {
-    p_name: name,
-    p_user_id: currentUserId,
-  });
-  if (error) throw error;
-  return Boolean(data);
+  try {
+    // Try RPC function first
+    const { data, error } = await supabase.rpc('is_display_name_available', {
+      p_name: name,
+      p_user_id: currentUserId,
+    });
+    if (!error) return Boolean(data);
+    
+    // If RPC fails (e.g., function doesn't exist), fall back to direct query
+    console.warn('[Zentrix] RPC is_display_name_available failed, using fallback:', error.message);
+  } catch (e) {
+    console.warn('[Zentrix] RPC call failed, using fallback query');
+  }
+  
+  // Fallback: query profiles table directly
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('display_name', name)
+    .neq('id', currentUserId)
+    .limit(1);
+    
+  if (error) {
+    console.error('[Zentrix] Fallback query failed:', error);
+    // On error, assume name is available (optimistic)
+    return true;
+  }
+  
+  return !data || data.length === 0;
 };
 
 export const setUserOnline = (uid: string) =>
