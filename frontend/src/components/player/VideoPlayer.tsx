@@ -84,12 +84,12 @@ interface SeptorchResponse {
 // ─── Server definitions ─────────────────────────────────────────────
 
 const ALL_SERVERS: ServerDef[] = [
-  { id: 'animeheaven', label: 'Server 1', icon: Mic,          iconColor: '#F472B6', description: 'AnimeHeaven · Direct MP4', animeOnly: true },
+  { id: 'animeheaven', label: 'Server 1', icon: Mic,          iconColor: '#F472B6', description: 'Direct MP4', animeOnly: true },
   { id: 'megaplay',     label: 'Server 2', icon: Globe,        iconColor: '#22D3EE', description: 'Sub audio · Verified',  animeOnly: true },
   { id: 'vidsrc',       label: 'Server 3', icon: Clapperboard, iconColor: '#7B6FF0', description: 'Primary · Reliable'                     },
   { id: 'vidlink',      label: 'Server 4', icon: Link2,        iconColor: '#2DD4BF', description: 'Fast · Recommended',  adNote: true        },
   { id: 'vidsrc2',      label: 'Server 5', icon: Zap,          iconColor: '#FCD34D', description: 'VidSrc Mirror · HD'                     },
-  { id: 'septorch',     label: 'Server 6', icon: HardDrive,    iconColor: '#FB7185', description: 'Septorch · Direct MP4 Stream', directPlay: true },
+  { id: 'septorch',     label: 'Server 6', icon: HardDrive,    iconColor: '#FB7185', description: 'Direct MP4 Stream', directPlay: true },
 ];
 
 // ─── Synchronous URL builders (iframe-based servers) ────────────────
@@ -791,7 +791,7 @@ export default function VideoPlayer({
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zx-s2">
               <Loader2 size={40} className="text-primary-400 animate-spin" />
               <div className="text-center">
-                <p className="text-white font-semibold text-sm">Loading from AnimeHeaven…</p>
+                <p className="text-white font-semibold text-sm">Fetching from server…</p>
                 <p className="text-gray-500 text-xs mt-1">Fetching EP{episode}</p>
               </div>
             </div>
@@ -868,7 +868,7 @@ export default function VideoPlayer({
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zx-s2">
               <Loader2 size={40} className="text-emerald-400 animate-spin" />
               <div className="text-center">
-                <p className="text-white font-semibold text-sm">Loading from Septorch…</p>
+                <p className="text-white font-semibold text-sm">Fetching from server…</p>
                 <p className="text-gray-500 text-xs mt-1">
                   {title ? `Searching: "${title}"` : 'Resolving streams…'}
                 </p>
