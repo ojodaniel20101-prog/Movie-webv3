@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -123,13 +123,13 @@ function AppRoutes() {
   }, [isLoading, isAuthenticated]);
 
   // Safety timeout: never block app more than 3s waiting for Supabase
-  const authTimedOut = useRef(false);
+  const [authTimedOut, setAuthTimedOut] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => { authTimedOut.current = true; }, 3000);
+    const t = setTimeout(() => { setAuthTimedOut(true); }, 3000);
     return () => clearTimeout(t);
   }, []);
 
-  if (isLoading && !authTimedOut.current && location.pathname !== '/admin') return <PageLoader />;
+  if (isLoading && !authTimedOut && location.pathname !== '/admin') return <PageLoader />;
 
   return (
     <Suspense fallback={<PageLoader />}>

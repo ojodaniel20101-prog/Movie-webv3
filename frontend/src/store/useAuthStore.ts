@@ -169,13 +169,26 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   // ─── Auth State Listener ──────────────────────────────────────────────────
   initAuth: () => {
+    // Safety timeout: ensure loading always finishes even if Supabase hangs
+    const loadingTimeout = setTimeout(() => {
+      const state = get();
+      if (state.isLoading) {
+        console.warn('[Zentrix] Auth loading timed out — forcing isLoading false');
+        set({ isLoading: false });
+      }
+    }, 5000);
+
     // Handle initial session (e.g. after OAuth redirect)
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) set({ isLoading: false });
+      if (!session) {
+        clearTimeout(loadingTimeout);
+        set({ isLoading: false });
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        clearTimeout(loadingTimeout);
         if (session?.user) {
           const su = session.user;
           try {
@@ -247,6 +260,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       },
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(loadingTimeout);
+      subscription.unsubscribe();
+    };
   },
 }));
