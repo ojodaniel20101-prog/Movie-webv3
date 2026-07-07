@@ -109,6 +109,57 @@ export const getAnimeShows = (page = 1) =>
 export const getGenres = (type: 'movie' | 'tv' = 'movie') =>
   cachedRequest<{ genres: { id: number; name: string }[] }>(`/genre/${type}/list`);
 
+// ─── Nollywood ─────────────────────────────────────────
+export const getNollywoodMovies = (page = 1) =>
+  cachedRequest<TMDBResponse<TMDBMovie>>('/discover/movie', {
+    page,
+    with_origin_country: 'NG',
+    sort_by: 'popularity.desc',
+    include_adult: false,
+  });
+
+export const getNollywoodShows = (page = 1) =>
+  cachedRequest<TMDBResponse<TMDBShow>>('/discover/tv', {
+    page,
+    with_origin_country: 'NG',
+    sort_by: 'popularity.desc',
+    include_adult: false,
+  });
+
+// ─── Superhero ─────────────────────────────────────────
+export const getSuperheroMovies = (page = 1) =>
+  cachedRequest<TMDBResponse<TMDBMovie>>('/discover/movie', {
+    page,
+    with_keywords: '9715|192092|155', // superhero, super power, hero
+    sort_by: 'popularity.desc',
+    include_adult: false,
+  });
+
+export const getSuperheroShows = (page = 1) =>
+  cachedRequest<TMDBResponse<TMDBShow>>('/discover/tv', {
+    page,
+    with_keywords: '9715|192092|155',
+    sort_by: 'popularity.desc',
+    include_adult: false,
+  });
+
+// ─── Teen Fantasy / Young Adult ────────────────────────
+export const getTeenFantasyMovies = (page = 1) =>
+  cachedRequest<TMDBResponse<TMDBMovie>>('/discover/movie', {
+    page,
+    with_keywords: '196962|334', // teen fantasy, coming of age
+    sort_by: 'popularity.desc',
+    include_adult: false,
+  });
+
+export const getTeenFantasyShows = (page = 1) =>
+  cachedRequest<TMDBResponse<TMDBShow>>('/discover/tv', {
+    page,
+    with_keywords: '196962|334',
+    sort_by: 'popularity.desc',
+    include_adult: false,
+  });
+
 // ─── Anime: find TMDB ID from a title ───────────────────
 // Used to resolve AniList anime → TMDB ID for vidsrc playback
 export const findAnimeTMDBId = async (title: string): Promise<number | null> => {

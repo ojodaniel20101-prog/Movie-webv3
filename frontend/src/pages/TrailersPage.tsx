@@ -8,11 +8,26 @@ import TrailerCard        from '@/components/trailers/TrailerCard';
 import { useTrailerFeed } from '@/hooks/useTrailerFeed';
 import { fetchTrailers, type TrailerItem, type TrailerCategory } from '@/services/trailers';
 
+// ─── Category config with cinverse-style labels ──────────────────────────────
+const CATEGORY_CONFIG: { id: TrailerCategory; label: string; description: string }[] = [
+  { id: 'explore',  label: 'All Trailers',  description: 'Latest trailers from movies, TV & anime' },
+  { id: 'movies',   label: 'Movies',        description: 'Blockbuster movie trailers' },
+  { id: 'tv',       label: 'TV Series',     description: 'Binge-worthy TV show trailers' },
+  { id: 'anime',    label: 'Anime',         description: 'Japanese animation trailers' },
+  { id: 'action',   label: 'Action',        description: 'High-octane action trailers' },
+  { id: 'horror',   label: 'Horror',        description: 'Scary movie & show trailers' },
+  { id: 'comedy',   label: 'Comedy',        description: 'Laugh-out-loud trailers' },
+  { id: 'scifi',    label: 'Sci-Fi',        description: 'Science fiction trailers' },
+  { id: 'romance',  label: 'Romance',       description: 'Love story trailers' },
+  { id: 'thriller', label: 'Thriller',      description: 'Edge-of-your-seat trailers' },
+  { id: 'animation',label: 'Animation',     description: 'Animated movie & show trailers' },
+  { id: 'upcoming', label: 'Coming Soon',   description: 'Upcoming releases' },
+];
+
 // ─── How many cards from the end triggers a pre-fetch ────────────────────────
 const PREFETCH_THRESHOLD = 3;
 
 // ─── Max time before auto-scroll fires if YouTube API doesn't send ended ─────
-// 3.5 min covers 99% of trailers. User can always scroll manually.
 const AUTO_SCROLL_FALLBACK_MS = 3.5 * 60 * 1000;
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -50,11 +65,43 @@ function EmptyState({ onRetry }: { onRetry: () => void }) {
       </div>
       <motion.button onClick={onRetry}
         className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white"
-        style={{ background: 'linear-gradient(135deg,#7B6FF0,#22D3EE)' }}
+        style={{ background: 'linear-gradient(135deg,#FF2D2D,#FF4444)' }}
         whileTap={{ scale: 0.95 }}>
         <RefreshCw size={14} /> Retry
       </motion.button>
     </div>
+  );
+}
+
+// ─── Category Header ──────────────────────────────────────────────────────────
+function CategoryHeader({
+  category,
+  totalItems,
+}: {
+  category: TrailerCategory;
+  totalItems: number;
+}) {
+  const config = CATEGORY_CONFIG.find(c => c.id === category);
+  if (!config) return null;
+
+  return (
+    <motion.div
+      key={category}
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="absolute top-16 left-4 right-4 z-30 pointer-events-none"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">
+          {config.label}
+        </span>
+        <span className="text-[10px] text-gray-600">·</span>
+        <span className="text-[10px] text-gray-500">
+          {totalItems} trailers
+        </span>
+      </div>
+      <p className="text-xs text-gray-400">{config.description}</p>
+    </motion.div>
   );
 }
 
@@ -96,7 +143,7 @@ export default function TrailersPage() {
 
   // ── Load ──────────────────────────────────────────────────────────────────
   const loadPage = useCallback(async (cat: TrailerCategory, pg: number, reset = false) => {
-    if (loadingMoreRef.current && pg > 1) return; // debounce
+    if (loadingMoreRef.current && pg > 1) return;
     if (pg === 1) setLoading(true);
     else setLoadingMore(true);
     setError(false);
@@ -110,7 +157,6 @@ export default function TrailersPage() {
           return [...prev, ...data.filter(d => !ids.has(d.id))];
         });
       }
-      // Still has more if we got a full page back
       setHasMore(data.length >= 8);
     } catch {
       setError(true);
@@ -130,9 +176,7 @@ export default function TrailersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
-  // ── FIX 2: activeIdx-based infinite scroll ────────────────────────────────
-  // The scroll-snap container means the sentinel div is unreachable via snapping.
-  // Instead we watch activeIdx and pre-fetch when nearing the end of the list.
+  // ActiveIdx-based infinite scroll
   useEffect(() => {
     const distFromEnd = itemsRef.current.length - 1 - activeIdx;
     if (
@@ -149,7 +193,7 @@ export default function TrailersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx]);
 
-  // ── Track active card from scroll position ────────────────────────────────
+  // Track active card from scroll position
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -161,11 +205,7 @@ export default function TrailersPage() {
     return () => el.removeEventListener('scroll', handle);
   }, []);
 
-  // ── FIX 1 (fallback): Timer-based auto-scroll ─────────────────────────────
-  // When the YouTube API fires the ended event → scrollToNext() is called immediately.
-  // When the YouTube API stays silent (unreliable on some devices) →
-  //   this timer fires after AUTO_SCROLL_FALLBACK_MS and scrolls anyway.
-  // The timer is reset every time the active card changes.
+  // Timer-based auto-scroll fallback
   const clearAutoScrollTimer = useCallback(() => {
     if (autoScrollTimerRef.current) {
       clearTimeout(autoScrollTimerRef.current);
@@ -186,7 +226,6 @@ export default function TrailersPage() {
     clearAutoScrollTimer();
   }, [clearAutoScrollTimer]);
 
-  // Start/reset the fallback timer whenever the active card changes
   useEffect(() => {
     clearAutoScrollTimer();
     if (!autoScroll || loading) return;
@@ -197,12 +236,10 @@ export default function TrailersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx, autoScroll, loading]);
 
-  // Cancel timer when user manually scrolls
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const handleManualScroll = () => {
-      // If user initiated scroll (touch), cancel the pending timer
       clearAutoScrollTimer();
     };
     el.addEventListener('touchstart', handleManualScroll, { passive: true });
@@ -234,107 +271,76 @@ export default function TrailersPage() {
           onClick={() => setAutoScroll(v => !v)}
           className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
           style={{
-            background:     autoScroll ? 'rgba(123,111,240,0.35)' : 'rgba(0,0,0,0.55)',
+            background:     autoScroll ? 'rgba(255,45,45,0.35)' : 'rgba(0,0,0,0.55)',
             backdropFilter: 'blur(12px)',
-            border:         autoScroll ? '1px solid rgba(123,111,240,0.5)' : '1px solid rgba(255,255,255,0.1)',
-            color:          autoScroll ? '#c4b5fd' : 'rgba(255,255,255,0.6)',
+            border:         autoScroll ? '1px solid rgba(255,45,45,0.5)' : '1px solid rgba(255,255,255,0.1)',
+            color:          autoScroll ? '#FF6B6B' : 'rgba(255,255,255,0.6)',
           }}
           whileTap={{ scale: 0.92 }}>
-          <ChevronDown size={13} className={autoScroll ? 'text-primary-300' : 'text-white/50'} />
-          {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+          {autoScroll ? 'Auto-Scroll ON' : 'Auto-Scroll OFF'}
         </motion.button>
       </div>
 
-      {/* ── Category nav ─────────────────────────────────────────────────── */}
-      <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none">
-        <div className="pointer-events-auto">
-          <CategoryNav active={category} onChange={handleCategoryChange} />
-        </div>
-      </div>
+      {/* ── Category Header ─────────────────────────────────────────────── */}
+      {!loading && items.length > 0 && (
+        <CategoryHeader category={category} totalItems={items.length} />
+      )}
 
-      {/* ── Feed ─────────────────────────────────────────────────────────── */}
+      {/* ── Scroll container ────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className="w-screen h-full overflow-y-scroll scrollbar-hide"
-        style={{
-          scrollSnapType:          'y mandatory',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior:      'contain',
-          scrollbarWidth:          'none',        // Firefox
-          msOverflowStyle:         'none',        // IE/Edge
-        }}
+        className="h-full overflow-y-auto snap-y snap-mandatory"
+        style={{ scrollSnapType: 'y mandatory' }}
       >
-        <AnimatePresence mode="wait">
-          {loading ? (
-            <motion.div key="skeletons" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              {[0,1,2].map(i => (
-                <div key={i} className="w-screen flex-shrink-0"
-                  style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
-                  <TrailerSkeleton />
-                </div>
-              ))}
-            </motion.div>
-          ) : error || items.length === 0 ? (
-            <div key="empty" className="w-screen flex-shrink-0 flex items-center justify-center"
-              style={{ height: '100dvh' }}>
-              <EmptyState onRetry={() => loadPage(category, 1, true)} />
+        {loading && items.length === 0 ? (
+          <div className="snap-start" style={{ height: '100dvh' }}>
+            <TrailerSkeleton />
+          </div>
+        ) : error ? (
+          <div className="snap-start" style={{ height: '100dvh' }}>
+            <EmptyState onRetry={() => loadPage(category, 1, true)} />
+          </div>
+        ) : (
+          items.map((item, idx) => (
+            <div
+              key={`${item.id}-${idx}`}
+              className="snap-start"
+              style={{ height: '100dvh' }}
+            >
+              <TrailerCard
+                item={item}
+                isActive={idx === activeIdx}
+                feedControls={feedControls}
+                onEnded={scrollToNext}
+              />
             </div>
-          ) : (
-            <motion.div key={`feed-${category}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
-              {items.map((item, idx) => (
-                <div key={item.id} className="w-screen flex-shrink-0 relative overflow-hidden"
-                  style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
-                  <TrailerCard
-                    item={item}
-                    isActive={idx === activeIdx}
-                    feedControls={feedControls}
-                    onEnded={idx === activeIdx ? scrollToNext : undefined}
-                  />
-                </div>
-              ))}
+          ))
+        )}
 
-              {/* Loading more — must be a full snap card so it's reachable */}
-              {loadingMore && (
-                <div className="w-screen flex-shrink-0 flex items-center justify-center"
-                  style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 rounded-full border-2 border-primary-500/30 border-t-primary-500 animate-spin" />
-                    <p className="text-gray-500 text-sm">Loading more trailers…</p>
-                  </div>
-                </div>
-              )}
+        {/* Loading more */}
+        {loadingMore && (
+          <div className="snap-start" style={{ height: '100dvh' }}>
+            <TrailerSkeleton />
+          </div>
+        )}
 
-              {/* End of feed — full snap card + explore more button */}
-              {!hasMore && !loadingMore && items.length > 0 && (
-                <div className="w-screen flex-shrink-0 flex items-center justify-center"
-                  style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
-                  <div className="text-center px-8">
-                    <Clapperboard size={40} className="text-white/10 mx-auto mb-4" />
-                    <p className="text-white font-semibold">You've seen it all!</p>
-                    <p className="text-gray-600 text-sm mt-1 mb-5">Switch category for more trailers</p>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {(['trending','movies','anime','horror','action'] as TrailerCategory[]).map(cat => (
-                        <button key={cat} onClick={() => handleCategoryChange(cat)}
-                          className="px-4 py-2 rounded-full text-xs font-semibold text-white/70 capitalize transition-all hover:text-white"
-                          style={{ background: 'rgba(123,111,240,0.2)', border: '1px solid rgba(123,111,240,0.3)' }}>
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* End of list */}
+        {!hasMore && items.length > 0 && (
+          <div className="snap-start flex items-center justify-center" style={{ height: '100dvh' }}>
+            <div className="text-center">
+              <Clapperboard size={32} className="text-white/10 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">You've seen all trailers</p>
+              <p className="text-xs text-gray-600 mt-1">Check back later for more</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {deepContent && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full text-xs text-white/80"
-          style={{ background: 'rgba(123,111,240,0.3)', border: '1px solid rgba(123,111,240,0.4)', backdropFilter: 'blur(12px)' }}>
-          Showing linked trailer
-        </div>
-      )}
+      {/* ── Category Navigation ─────────────────────────────────────────── */}
+      <CategoryNav
+        active={category}
+        onChange={handleCategoryChange}
+      />
     </div>
   );
 }
