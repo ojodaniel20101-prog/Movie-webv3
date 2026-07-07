@@ -6,6 +6,30 @@ const TMDB_API_KEY = '5072a0ec4e400e825a615cd9f0dab0af';
 const TMDB_BASE    = 'https://api.themoviedb.org/3';
 const ANILIST_URL  = 'https://graphql.anilist.co';
 
+// YouTube embed base URL
+export const YOUTUBE_EMBED_BASE = 'https://www.youtube.com/embed';
+export const YOUTUBE_WATCH_BASE = 'https://www.youtube.com/watch';
+
+// ─── YouTube URL Helpers ──────────────────────────────────────────────────────
+
+export function getYouTubeEmbedUrl(videoKey: string, autoplay = false): string {
+  const params = new URLSearchParams({
+    rel: '0',
+    modestbranding: '1',
+    playsinline: '1',
+  });
+  if (autoplay) params.set('autoplay', '1');
+  return `${YOUTUBE_EMBED_BASE}/${videoKey}?${params.toString()}`;
+}
+
+export function getYouTubeWatchUrl(videoKey: string): string {
+  return `${YOUTUBE_WATCH_BASE}?v=${videoKey}`;
+}
+
+export function getYouTubeThumbnailUrl(videoKey: string, quality: 'default' | 'mqdefault' | 'hqdefault' | 'sddefault' | 'maxresdefault' = 'hqdefault'): string {
+  return `https://img.youtube.com/vi/${videoKey}/${quality}.jpg`;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TrailerItem {
@@ -302,4 +326,111 @@ export async function fetchTrailers(
   const result = shuffle(dedupe(items).filter((i) => i.youtubeKey && i.title));
   setCached(cacheKey, result);
   return result;
+}
+
+// ─── Single trailer fetch by TMDB ID ──────────────────────────────────────────
+
+export async function fetchTrailerByTMDBId(
+  id: number,
+  type: 'movie' | 'tv' = 'movie'
+): Promise<TrailerItem | null> {
+  try {
+    const tmdbApi = axios.create({
+      baseURL: TMDB_BASE,
+      params: { api_key: TMDB_API_KEY, language: 'en-US' },
+      timeout: 10000,
+    });
+
+    const res = await tmdbApi.get(`/${type}/${id}`, {
+      params: { append_to_response: 'videos,genres' },
+    });
+
+    const d = res.data;
+    const key = getTrailerKey(d.videos);
+    if (!key) return null;
+
+    return {
+      id: `${type}-${d.id}`,
+      contentId: d.id,
+      contentType: type,
+      youtubeKey: key,
+      title: d.title || d.name || '',
+      overview: d.overview || '',
+      posterPath: getPosterUrl(d.poster_path, 'w342'),
+      backdropPath: getBackdropUrl(d.backdrop_path, 'w780'),
+      releaseYear: getYear(d.release_date || d.first_air_date),
+      rating: d.vote_average ?? 0,
+      genres: (d.genres || []).map((g: { name: string }) => g.name),
+      runtime: d.runtime || d.episode_run_time?.[0],
+    };
+  } catch (err) {
+    console.error('[fetchTrailerByTMDBId]', id, type, err);
+    return null;
+  }
+}
+
+// ─── Single trailer fetch by AniList ID ───────────────────────────────────────
+
+export async function fetchTrailerByAniListId(id: number): Promise<TrailerItem | null> {
+  try {
+    const query = `
+      query($id:Int){
+        Media(id:$id,type:ANIME){
+          id
+          title { romaji english }
+          coverImage { extraLarge large }
+          bannerImage
+          description(asHtml: false)
+          averageScore
+          genres
+          episodes
+          duration
+          seasonYear
+          status
+          trailer { id site thumbnail }
+        }
+      }
+    `;
+
+    const res = await fetch(ANILIST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { id } }),
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    const m: AniListMedia = json.data?.Media;
+
+    if (!m || m.trailer?.site !== 'youtube' || !m.trailer?.id) return null;
+
+    return {
+      id: `anime-${m.id}`,
+      contentId: m.id,
+      contentType: 'anime',
+      youtubeKey: m.trailer.id,
+      title: m.title.english || m.title.romaji || '',
+      overview: m.description?.replace(/<[^>]+>/g, '') || '',
+      posterPath: m.coverImage?.extraLarge || m.coverImage?.large || null,
+      backdropPath: m.bannerImage || null,
+      releaseYear: String(m.seasonYear || ''),
+      rating: m.averageScore ? m.averageScore / 10 : 0,
+      genres: m.genres || [],
+      runtime: m.duration,
+      badge: 'SUB',
+    };
+  } catch (err) {
+    console.error('[fetchTrailerByAniListId]', id, err);
+    return null;
+  }
+}
+
+// ─── Generic trailer fetch by content type ────────────────────────────────────
+
+export async function fetchTrailer(
+  type: 'movie' | 'tv' | 'anime',
+  id: number
+): Promise<TrailerItem | null> {
+  if (type === 'anime') return fetchTrailerByAniListId(id);
+  return fetchTrailerByTMDBId(id, type);
 }
