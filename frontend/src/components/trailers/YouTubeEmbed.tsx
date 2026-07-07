@@ -138,40 +138,59 @@ export default function YouTubeEmbed({
       {posterPath && !loaded && (
         <div
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${posterPath})`, filter: 'brightness(0.45)' }}
+          style={{
+            backgroundImage: `url(${posterPath})`,
+            filter: 'brightness(0.45)',
+            /* Ensure poster always fills like object-fit:cover */
+            width: '100%',
+            height: '100%',
+          }}
         />
       )}
 
       {show && (
-        <iframe
-          ref={iframeRef}
-          src={src}
-          className={`absolute inset-0 w-full h-full border-0 transition-opacity duration-500 ${
-            loaded ? 'opacity-100' : 'opacity-0'
-          }`}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-          onLoad={() => {
-            setLoaded(true);
-            loadedRef.current = true;
+        /* ── TikTok-style full-screen cover: iframe is sized to ALWAYS fill
+            the viewport, cropping excess. The wrapper overflow:hidden clips
+            the parts that extend beyond the container. This eliminates the
+            black letterbox bars YouTube adds for 16:9 content on 9:16 phones. ── */
+        <div className="absolute inset-0 overflow-hidden">
+          <iframe
+            ref={iframeRef}
+            src={src}
+            className={`absolute top-1/2 left-1/2 border-0 transition-opacity duration-500 ${
+              loaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            onLoad={() => {
+              setLoaded(true);
+              loadedRef.current = true;
 
-            // ── CRITICAL FIX: Send "listening" handshake to YouTube ──────────
-            // This tells the YouTube player "I'm here, please send me events".
-            // Without this message, playerState events are NEVER emitted back.
-            // We send it twice (100ms apart) for reliability on slow connections.
-            const postListening = () =>
-              iframeRef.current?.contentWindow?.postMessage(
-                JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-                '*'
-              );
-            postListening();
-            setTimeout(postListening, 500);
+              // ── CRITICAL FIX: Send "listening" handshake to YouTube ──────────
+              // This tells the YouTube player "I'm here, please send me events".
+              // Without this message, playerState events are NEVER emitted back.
+              // We send it twice (100ms apart) for reliability on slow connections.
+              const postListening = () =>
+                iframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+                  '*'
+                );
+              postListening();
+              setTimeout(postListening, 500);
 
-            onReady?.();
-          }}
-          title="Trailer"
-          style={{ transform: 'scale(1.05)', transformOrigin: 'center' }}
-        />
+              onReady?.();
+            }}
+            title="Trailer"
+            style={{
+              /* 16:9 aspect ratio, but ensure it always covers the viewport */
+              width: '100vw',
+              height: '56.25vw',           /* 16:9 ratio based on vw */
+              minHeight: '100vh',
+              minWidth: '177.78vh',        /* (16/9) * 100vh — ensures height fill on portrait */
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        </div>
       )}
 
       <motion.button

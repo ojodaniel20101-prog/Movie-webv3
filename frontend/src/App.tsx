@@ -137,6 +137,7 @@ function AppRoutes() {
         <Route path="/auth"    element={<AuthPage />} />
         <Route path="/admin"   element={<AdminPage />} />
         <Route path="/trailers" element={<TrailersPage />} />
+        <Route path="/trail"   element={<Navigate to="/trailers" replace />} />
         <Route
           path="/watch/:type/:id"
           element={<Layout fullscreen><WatchPage /></Layout>}
