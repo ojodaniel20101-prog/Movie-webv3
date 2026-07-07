@@ -96,7 +96,7 @@ function TrailerCard({ item, isActive, feedControls, onEnded }: Props) {
   const watchHref = `/details/${item.contentType}/${item.contentId}`;
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-black">
+    <div className="relative w-screen h-[100dvh] overflow-hidden bg-black">
 
       {/* YouTube embed */}
       <YouTubeEmbed

@@ -722,6 +722,13 @@ body.drawer-open {
   scrollbar-width: thin;
 }
 
+/* ─── SCROLLBAR HIDE (TikTok-style full-screen feed) ──────── */
+.scrollbar-hide {
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* IE/Edge */
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
 /* ─── SAFE VIEWPORT HEIGHT ────────────────────────────────── */
 .h-dvh  { height: 100dvh; }
 .min-h-dvh { min-height: 100dvh; }

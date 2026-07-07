@@ -134,7 +134,7 @@ export default function YouTubeEmbed({
   ].join('');
 
   return (
-    <div className="absolute inset-0 w-full h-full overflow-hidden bg-black">
+    <div className="absolute inset-0 w-screen h-[100dvh] overflow-hidden bg-black">
       {posterPath && !loaded && (
         <div
           className="absolute inset-0 bg-cover bg-center"
@@ -182,12 +182,14 @@ export default function YouTubeEmbed({
             }}
             title="Trailer"
             style={{
-              /* 16:9 aspect ratio, but ensure it always covers the viewport */
-              width: '100vw',
-              height: '56.25vw',           /* 16:9 ratio based on vw */
-              minHeight: '100vh',
-              minWidth: '177.78vh',        /* (16/9) * 100vh — ensures height fill on portrait */
-              transform: 'translate(-50%, -50%)',
+              /* ── TikTok full-screen cover: iframe ALWAYS fills viewport, cropping excess.
+                  16:9 video is scaled to cover 9:16 (portrait) or any aspect ratio.
+                  Uses dvw/dvh to match parent's 100dvh and account for mobile dynamic toolbars. ── */
+              width:      '100dvw',
+              height:     '56.25dvw',      /* 16:9 ratio based on viewport width  */
+              minHeight:  '100dvh',         /* always fill full dynamic viewport height */
+              minWidth:   '177.78dvh',      /* (16/9) * 100dvh — fill height on portrait */
+              transform:  'translate(-50%, -50%)',
             }}
           />
         </div>

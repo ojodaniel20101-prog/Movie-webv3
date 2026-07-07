@@ -255,32 +255,34 @@ export default function TrailersPage() {
       {/* ── Feed ─────────────────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className="w-full h-full overflow-y-scroll"
+        className="w-screen h-full overflow-y-scroll scrollbar-hide"
         style={{
           scrollSnapType:          'y mandatory',
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior:      'contain',
+          scrollbarWidth:          'none',        // Firefox
+          msOverflowStyle:         'none',        // IE/Edge
         }}
       >
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.div key="skeletons" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               {[0,1,2].map(i => (
-                <div key={i} className="w-full flex-shrink-0"
+                <div key={i} className="w-screen flex-shrink-0"
                   style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
                   <TrailerSkeleton />
                 </div>
               ))}
             </motion.div>
           ) : error || items.length === 0 ? (
-            <div key="empty" className="w-full flex-shrink-0 flex items-center justify-center"
+            <div key="empty" className="w-screen flex-shrink-0 flex items-center justify-center"
               style={{ height: '100dvh' }}>
               <EmptyState onRetry={() => loadPage(category, 1, true)} />
             </div>
           ) : (
             <motion.div key={`feed-${category}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
               {items.map((item, idx) => (
-                <div key={item.id} className="w-full flex-shrink-0 relative"
+                <div key={item.id} className="w-screen flex-shrink-0 relative overflow-hidden"
                   style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
                   <TrailerCard
                     item={item}
@@ -293,7 +295,7 @@ export default function TrailersPage() {
 
               {/* Loading more — must be a full snap card so it's reachable */}
               {loadingMore && (
-                <div className="w-full flex-shrink-0 flex items-center justify-center"
+                <div className="w-screen flex-shrink-0 flex items-center justify-center"
                   style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-8 h-8 rounded-full border-2 border-primary-500/30 border-t-primary-500 animate-spin" />
@@ -304,7 +306,7 @@ export default function TrailersPage() {
 
               {/* End of feed — full snap card + explore more button */}
               {!hasMore && !loadingMore && items.length > 0 && (
-                <div className="w-full flex-shrink-0 flex items-center justify-center"
+                <div className="w-screen flex-shrink-0 flex items-center justify-center"
                   style={{ height: '100dvh', scrollSnapAlign: 'start' }}>
                   <div className="text-center px-8">
                     <Clapperboard size={40} className="text-white/10 mx-auto mb-4" />
