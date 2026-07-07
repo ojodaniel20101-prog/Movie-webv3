@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Session } from '@supabase/supabase-js';
 import {
   supabase,
   upsertUserProfile,
@@ -178,17 +179,92 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       }
     }, 5000);
 
-    // Handle initial session (e.g. after OAuth redirect)
+    // Helper: process a session into auth state (used by both getSession and onAuthStateChange)
+    const processSession = async (session: Session | null) => {
+      if (!session?.user) return;
+      const su = session.user;
+      try {
+        const profile = await upsertUserProfile(
+          su.id,
+          su.email ?? '',
+          su.user_metadata?.full_name ?? su.user_metadata?.name ?? 'User',
+          su.user_metadata?.avatar_url ?? su.user_metadata?.picture ?? null,
+        );
+
+        if (profile.is_banned) {
+          await supabase.auth.signOut();
+          set({ user: null, profile: null, isAuthenticated: false, isLoading: false, isAdmin: false });
+          return;
+        }
+
+        const isAdmin = ADMIN_EMAILS.includes(su.email ?? '') || profile.role === 'admin';
+        const user: User = {
+          id:       su.id,
+          email:    su.email ?? null,
+          username: profile.display_name || 'User',
+          avatar:   profile.custom_photo_url ?? profile.photo_url ?? null,
+          isGuest:  false,
+        };
+
+        set({ user, profile, isAuthenticated: true, isAdmin });
+        get().refreshHeartbeat();
+
+        const [{ useWatchlistStore }, { useHistoryStore }] = await Promise.all([
+          import('./useWatchlistStore'),
+          import('./useHistoryStore'),
+        ]);
+        useWatchlistStore.getState().setUserId(su.id);
+        useHistoryStore.getState().setUserId(su.id);
+
+        set({ isLoading: false });
+      } catch (err) {
+        console.error('[Zentrix] upsertUserProfile failed:', err);
+        const isAdminFallback = ADMIN_EMAILS.includes(su.email ?? '');
+        set({
+          user: {
+            id:       su.id,
+            email:    su.email ?? null,
+            username: su.user_metadata?.full_name ?? su.user_metadata?.name ?? 'User',
+            avatar:   su.user_metadata?.avatar_url ?? su.user_metadata?.picture ?? null,
+            isGuest:  false,
+          },
+          isAuthenticated: true,
+          isAdmin:         isAdminFallback,
+        });
+        const [{ useWatchlistStore: WS }, { useHistoryStore: HS }] = await Promise.all([
+          import('./useWatchlistStore'),
+          import('./useHistoryStore'),
+        ]);
+        WS.getState().setUserId(su.id);
+        HS.getState().setUserId(su.id);
+        set({ isLoading: false });
+      }
+    };
+
+    // Handle initial session (e.g. after page refresh or OAuth redirect)
+    // CRITICAL: Process existing session directly — don't rely solely on onAuthStateChange
+    let sessionRestored = false;
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
+      if (session?.user) {
+        sessionRestored = true;
+        processSession(session).then(() => {
+          clearTimeout(loadingTimeout);
+        });
+      } else {
         clearTimeout(loadingTimeout);
         set({ isLoading: false });
       }
+    }).catch((err) => {
+      console.error('[Zentrix] getSession error:', err);
+      clearTimeout(loadingTimeout);
+      set({ isLoading: false });
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         clearTimeout(loadingTimeout);
+        // Skip if we already restored this session via getSession() above
+        if (event === 'INITIAL_SESSION' && sessionRestored) return;
         if (session?.user) {
           const su = session.user;
           try {
