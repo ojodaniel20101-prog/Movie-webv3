@@ -43,6 +43,10 @@ const tmdb = axios.create({
   baseURL: TMDB_BASE_URL,
   params: { api_key: TMDB_API_KEY, language: 'en-US' },
   timeout: 10000,
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  },
 });
 
 const cache = new Map<string, { data: unknown; timestamp: number }>();
@@ -73,7 +77,7 @@ export const getUpcomingMovies  = (page = 1) => cachedRequest<TMDBResponse<TMDBM
 
 export const getMovieDetails = (id: number) =>
   cachedRequest<TMDBMovie>(`/movie/${id}`, {
-    append_to_response: 'credits,videos,recommendations,similar,images,external_ids',
+    append_to_response: 'credits,videos,recommendations,similar,images,external_ids,release_dates',
   });
 export const getMovieVideos  = (id: number) =>
   cachedRequest<{ id: number; results: Video[] }>(`/movie/${id}/videos`);
@@ -85,7 +89,7 @@ export const getAiringShows   = (page = 1) => cachedRequest<TMDBResponse<TMDBSho
 
 export const getShowDetails = (id: number) =>
   cachedRequest<TMDBShow>(`/tv/${id}`, {
-    append_to_response: 'credits,videos,recommendations,similar,images,external_ids',
+    append_to_response: 'credits,videos,recommendations,similar,images,external_ids,content_ratings',
   });
 export const getSeasonDetails = (showId: number, seasonNumber: number) =>
   cachedRequest<Season>(`/tv/${showId}/season/${seasonNumber}`);
@@ -109,22 +113,177 @@ export const getAnimeShows = (page = 1) =>
 export const getGenres = (type: 'movie' | 'tv' = 'movie') =>
   cachedRequest<{ genres: { id: number; name: string }[] }>(`/genre/${type}/list`);
 
+// ─── Content Rating Helpers ──────────────────────────────
+
+export interface ContentRating {
+  country: string;
+  rating: string;
+}
+
+export function getContentRatingUS(releaseDates?: { results: Array<{ iso_3166_1: string; release_dates: Array<{ certification: string }> }> }): string | null {
+  if (!releaseDates?.results) return null;
+  const usEntry = releaseDates.results.find(r => r.iso_3166_1 === 'US');
+  if (!usEntry?.release_dates?.length) return null;
+  // Find first non-empty certification
+  const cert = usEntry.release_dates.find(r => r.certification)?.certification;
+  return cert || null;
+}
+
+export function getContentRatingTV(contentRatings?: { results: Array<{ iso_3166_1: string; rating: string }> }): string | null {
+  if (!contentRatings?.results) return null;
+  const usEntry = contentRatings.results.find(r => r.iso_3166_1 === 'US');
+  return usEntry?.rating || null;
+}
+
 // ─── Nollywood ─────────────────────────────────────────
-export const getNollywoodMovies = (page = 1) =>
-  cachedRequest<TMDBResponse<TMDBMovie>>('/discover/movie', {
+
+/**
+ * Get Nollywood movies — Nigerian-produced films.
+ * Uses multiple strategies to find real Nollywood content on TMDB.
+ */
+export const getNollywoodMovies = async (page = 1): Promise<TMDBResponse<TMDBMovie>> => {
+  // Strategy 1: Discover with Nigerian origin country
+  try {
+    const result = await cachedRequest<TMDBResponse<TMDBMovie>>('/discover/movie', {
+      page,
+      with_origin_country: 'NG',
+      sort_by: 'popularity.desc',
+      include_adult: false,
+      'vote_count.gte': 1,
+    });
+    if (result.results?.length >= 4) return result;
+  } catch {
+    // Fallback to next strategy
+  }
+
+  // Strategy 2: Search for Nollywood-specific titles
+  try {
+    const searchTerms = ['nollywood', 'nigerian film', 'nigerian movie'];
+    const allResults: TMDBMovie[] = [];
+    for (const term of searchTerms) {
+      const res = await cachedRequest<TMDBResponse<TMDBMovie>>('/search/movie', {
+        query: term,
+        page,
+      });
+      if (res.results) allResults.push(...res.results);
+    }
+    // Deduplicate by ID
+    const seen = new Set<number>();
+    const unique = allResults.filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+    if (unique.length >= 4) {
+      return { page, results: unique, total_pages: page + 1, total_results: unique.length };
+    }
+  } catch {
+    // Fallback
+  }
+
+  // Strategy 3: Discover with African production companies + drama/romance genres
+  try {
+    return await cachedRequest<TMDBResponse<TMDBMovie>>('/discover/movie', {
+      page,
+      with_genres: '18|10749|35', // Drama, Romance, Comedy
+      with_original_language: 'en',
+      region: 'NG',
+      sort_by: 'popularity.desc',
+      include_adult: false,
+    });
+  } catch {
+    // Return empty as last resort
+    return { page: 1, results: [], total_pages: 0, total_results: 0 };
+  }
+};
+
+/**
+ * Get Nollywood TV shows — Nigerian-produced series.
+ */
+export const getNollywoodShows = async (page = 1): Promise<TMDBResponse<TMDBShow>> => {
+  // Strategy 1: Discover with Nigerian origin country
+  try {
+    const result = await cachedRequest<TMDBResponse<TMDBShow>>('/discover/tv', {
+      page,
+      with_origin_country: 'NG',
+      sort_by: 'popularity.desc',
+      include_adult: false,
+      'vote_count.gte': 1,
+    });
+    if (result.results?.length >= 3) return result;
+  } catch {
+    // Fallback
+  }
+
+  // Strategy 2: Search for Nigerian TV content
+  try {
+    const searchTerms = ['nigerian series', 'nollywood series', 'african drama'];
+    const allResults: TMDBShow[] = [];
+    for (const term of searchTerms) {
+      const res = await cachedRequest<TMDBResponse<TMDBShow>>('/search/tv', {
+        query: term,
+        page,
+      });
+      if (res.results) allResults.push(...res.results);
+    }
+    const seen = new Set<number>();
+    const unique = allResults.filter(s => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+    if (unique.length >= 3) {
+      return { page, results: unique, total_pages: page + 1, total_results: unique.length };
+    }
+  } catch {
+    // Fallback
+  }
+
+  // Strategy 3: African TV shows
+  try {
+    return await cachedRequest<TMDBResponse<TMDBShow>>('/discover/tv', {
+      page,
+      with_origin_country: 'ZA|NG|GH|KE',
+      with_original_language: 'en',
+      sort_by: 'popularity.desc',
+      include_adult: false,
+    });
+  } catch {
+    return { page: 1, results: [], total_pages: 0, total_results: 0 };
+  }
+};
+
+/**
+ * Search specifically for Nigerian/Nollywood content by title.
+ * Used for boosting Nollywood results in search.
+ */
+export const searchNollywoodContent = async (query: string, page = 1) => {
+  const results = await cachedRequest<TMDBResponse<TMDBSearchResult>>('/search/multi', {
+    query,
     page,
-    with_origin_country: 'NG',
-    sort_by: 'popularity.desc',
     include_adult: false,
   });
 
-export const getNollywoodShows = (page = 1) =>
-  cachedRequest<TMDBResponse<TMDBShow>>('/discover/tv', {
-    page,
-    with_origin_country: 'NG',
-    sort_by: 'popularity.desc',
-    include_adult: false,
+  // Boost Nigerian content in ranking
+  const boosted = results.results.sort((a, b) => {
+    let scoreA = (a.popularity || 0);
+    let scoreB = (b.popularity || 0);
+
+    // Boost Nigerian-sounding titles
+    const nigerianTerms = ['nollywood', 'nigerian', 'lagos', 'abuja', 'igbo', 'yoruba', 'hausa'];
+    const aTitle = (a.title || a.name || '').toLowerCase();
+    const bTitle = (b.title || b.name || '').toLowerCase();
+
+    for (const term of nigerianTerms) {
+      if (aTitle.includes(term)) scoreA *= 3;
+      if (bTitle.includes(term)) scoreB *= 3;
+    }
+
+    return scoreB - scoreA;
   });
+
+  return { ...results, results: boosted };
+};
 
 // ─── Superhero ─────────────────────────────────────────
 export const getSuperheroMovies = (page = 1) =>

@@ -1,5 +1,14 @@
 /*
-  Zentrix VideoPlayer — v3.1
+  Zentrix VideoPlayer — v3.2
+  ────────────────────────────────────────────────────────────────────
+  CHANGES v3.2:
+  ✅ Enhanced subtitle system matching cinverse
+  ✅ CC button with subtitle selector dropdown (50+ languages)
+  ✅ Subtitle Settings modal: Font Size, Text Color, Background
+  ✅ Subtitle overlay synced with video via native <track> elements
+  ✅ LocalStorage persistence for subtitle preferences
+  ✅ Text shadow and fade animations for readability
+  ✅ Mobile-responsive subtitle sizing
   ────────────────────────────────────────────────────────────────────
   CHANGES v3.1:
   ✅ Replaced MovieBox with Septorch API for direct MP4 streaming
@@ -21,11 +30,24 @@ import {
   Server, Globe, ChevronDown,
   AlertCircle, RefreshCw, ExternalLink, Shield, Check, Loader2,
   Mic, Link2, Zap, Clapperboard, Download, Film, HardDrive,
-  Subtitles, MessageSquareOff,
+  Subtitles, MessageSquareOff, Settings, Type, Palette, RectangleHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import type { ContentType } from '@/types';
 import AdBlockGuideModal from '@/components/adblock/AdBlockGuideModal';
+import {
+  loadSubtitleSettings,
+  saveSubtitleSettings,
+  applySubtitleStyles,
+  type SubtitleStyleSettings,
+  type SubtitleFontSize,
+  type SubtitleTextColor,
+  type SubtitleBackground,
+  getFontSizeLabel,
+  getBackgroundLabel,
+  SUBTITLE_LANGUAGES,
+  getLanguageName,
+} from '@/services/subtitles';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -124,6 +146,200 @@ function buildStaticUrl(
   }
 }
 
+// ─── Subtitle Settings Modal Component ──────────────────────────────
+
+interface SubtitleSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function SubtitleSettingsModal({ isOpen, onClose }: SubtitleSettingsModalProps) {
+  const [settings, setSettings] = useState<SubtitleStyleSettings>(loadSubtitleSettings);
+
+  const updateSetting = <K extends keyof SubtitleStyleSettings>(
+    key: K,
+    value: SubtitleStyleSettings[K]
+  ) => {
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+    saveSubtitleSettings(next);
+    applySubtitleStyles(next);
+  };
+
+  const fontSizes: SubtitleFontSize[] = ['small', 'medium', 'large', 'xl'];
+  const textColors: { value: SubtitleTextColor; label: string; color: string }[] = [
+    { value: 'white', label: 'White', color: '#FFFFFF' },
+    { value: 'yellow', label: 'Yellow', color: '#FFD060' },
+  ];
+  const backgrounds: SubtitleBackground[] = ['none', 'semi', 'full'];
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          {/* Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 20 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed z-[101] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md rounded-2xl overflow-hidden shadow-2xl"
+            style={{
+              background: 'rgba(10,10,22,0.98)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(40px)',
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary-500/15 flex items-center justify-center">
+                  <Settings size={15} className="text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Subtitle Settings</h3>
+                  <p className="text-[11px] text-gray-500">Customize subtitle appearance</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-7 h-7 rounded-lg bg-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/[0.1] transition-all"
+              >
+                <span className="text-lg leading-none">&times;</span>
+              </button>
+            </div>
+
+            <div className="px-5 pb-5 space-y-5">
+              {/* Font Size */}
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <Type size={13} className="text-gray-500" />
+                  <span className="text-xs font-medium text-gray-300">Font Size</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {fontSizes.map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => updateSetting('fontSize', size)}
+                      className={`px-2 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                        settings.fontSize === size
+                          ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                          : 'bg-white/[0.04] text-gray-500 border-white/[0.06] hover:text-gray-300 hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      {getFontSizeLabel(size)}
+                    </button>
+                  ))}
+                </div>
+                {/* Preview */}
+                <div className="mt-2.5 p-3 rounded-xl bg-black/50 border border-white/[0.04] text-center">
+                  <span
+                    className="subtitle-preview-text inline-block"
+                    data-font-size={settings.fontSize}
+                    data-text-color={settings.textColor}
+                    data-background={settings.background}
+                    style={{
+                      fontSize: settings.fontSize === 'small' ? '14px' : settings.fontSize === 'medium' ? '18px' : settings.fontSize === 'large' ? '22px' : '26px',
+                      color: settings.textColor === 'white' ? '#FFFFFF' : '#FFD060',
+                      background: settings.background === 'none' ? 'transparent' : settings.background === 'semi' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.85)',
+                      padding: settings.background === 'none' ? '0' : '4px 12px',
+                      borderRadius: '6px',
+                      textShadow: settings.background === 'none' ? '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7)' : 'none',
+                    }}
+                  >
+                    Preview subtitle text
+                  </span>
+                </div>
+              </div>
+
+              {/* Text Color */}
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <Palette size={13} className="text-gray-500" />
+                  <span className="text-xs font-medium text-gray-300">Text Color</span>
+                </div>
+                <div className="flex gap-2">
+                  {textColors.map((tc) => (
+                    <button
+                      key={tc.value}
+                      onClick={() => updateSetting('textColor', tc.value)}
+                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
+                        settings.textColor === tc.value
+                          ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                          : 'bg-white/[0.04] text-gray-500 border-white/[0.06] hover:text-gray-300 hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full border border-white/20"
+                        style={{ background: tc.color }}
+                      />
+                      {tc.label}
+                      {settings.textColor === tc.value && <Check size={12} className="text-primary-400" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background */}
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <RectangleHorizontal size={13} className="text-gray-500" />
+                  <span className="text-xs font-medium text-gray-300">Background</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {backgrounds.map((bg) => (
+                    <button
+                      key={bg}
+                      onClick={() => updateSetting('background', bg)}
+                      className={`px-2 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                        settings.background === bg
+                          ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                          : 'bg-white/[0.04] text-gray-500 border-white/[0.06] hover:text-gray-300 hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      {getBackgroundLabel(bg)}
+                      {settings.background === bg && (
+                        <Check size={11} className="inline-block ml-1 text-primary-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reset */}
+              <button
+                onClick={() => {
+                  const defaults: SubtitleStyleSettings = {
+                    fontSize: 'medium',
+                    textColor: 'white',
+                    background: 'semi',
+                    enabled: true,
+                  };
+                  setSettings(defaults);
+                  saveSubtitleSettings(defaults);
+                  applySubtitleStyles(defaults);
+                }}
+                className="w-full py-2.5 rounded-xl text-xs font-medium text-gray-500 hover:text-gray-300 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] transition-all"
+              >
+                Reset to Defaults
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ─── Component ──────────────────────────────────────────────────────
 
 export default function VideoPlayer({
@@ -172,6 +388,7 @@ export default function VideoPlayer({
   const [selectedSubtitle,    setSelectedSubtitle]    = useState<string>('off');
   const [showSubtitleMenu,    setShowSubtitleMenu]    = useState(false);
   const [subtitlesReady,      setSubtitlesReady]      = useState(false);
+  const [showSubtitleSettings, setShowSubtitleSettings] = useState(false);
 
   // ── AnimeHeaven state ────────────────────────────────────────────
   const [ahUrl,         setAhUrl]         = useState<string | null>(null);
@@ -186,6 +403,11 @@ export default function VideoPlayer({
 
   // ── Video ref for direct play servers ────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // ── Initialize subtitle styles on mount ──────────────────────────
+  useEffect(() => {
+    applySubtitleStyles(loadSubtitleSettings());
+  }, []);
 
   // ── VidLink postMessage event listener ───────────────────────────
   useEffect(() => {
@@ -518,6 +740,12 @@ export default function VideoPlayer({
   return (
     <div className="w-full space-y-3">
 
+      {/* ══ SUBTITLE SETTINGS MODAL ═════════════════════════════ */}
+      <SubtitleSettingsModal
+        isOpen={showSubtitleSettings}
+        onClose={() => setShowSubtitleSettings(false)}
+      />
+
       {/* ══ CONTROLS ══════════════════════════════════════════════ */}
       <div className="flex flex-wrap items-center gap-2">
 
@@ -694,74 +922,136 @@ export default function VideoPlayer({
           </div>
         )}
 
-        {/* Subtitle selector (Septorch only) */}
-        {isSeptorch && subtitlesReady && subtitleTracks.length > 0 && (
-          <div className="relative">
-            <motion.button
-              onClick={() => setShowSubtitleMenu(v => !v)}
-              className="flex items-center gap-1.5 h-10 px-3 rounded-xl bg-zx-s3 border border-white/[0.08] text-xs text-gray-400 hover:text-white hover:border-white/15 transition-all"
-              whileTap={{ scale: 0.95 }}
-              title="Select subtitles"
-            >
-              {selectedSubtitle === 'off' ? <MessageSquareOff size={14} /> : <Subtitles size={14} />}
-              <span className="hidden sm:inline">
-                {selectedSubtitle === 'off' ? 'Subtitles' : subtitleTracks.find(t => t.srclang === selectedSubtitle)?.label || 'Subtitles'}
-              </span>
-              <ChevronDown size={11} className={`transition-transform ${showSubtitleMenu ? 'rotate-180' : ''}`} />
-            </motion.button>
+        {/* Subtitle Controls Group */}
+        {isSeptorch && (
+          <div className="flex items-center gap-1.5">
+            {/* CC / Subtitle selector */}
+            <div className="relative">
+              <motion.button
+                onClick={() => setShowSubtitleMenu(v => !v)}
+                className={`flex items-center gap-1.5 h-10 px-3 rounded-xl border text-xs transition-all ${
+                  selectedSubtitle !== 'off' && subtitlesReady
+                    ? 'bg-primary-500/15 border-primary-500/25 text-primary-300'
+                    : 'bg-zx-s3 border-white/[0.08] text-gray-400 hover:text-white hover:border-white/15'
+                }`}
+                whileTap={{ scale: 0.95 }}
+                title="Select subtitles"
+              >
+                {selectedSubtitle === 'off' || !subtitlesReady ? <MessageSquareOff size={14} /> : <Subtitles size={14} />}
+                <span className="hidden sm:inline">
+                  {selectedSubtitle === 'off' || !subtitlesReady
+                    ? 'Subtitles'
+                    : subtitleTracks.find(t => t.srclang === selectedSubtitle)?.label || 'Subtitles'
+                  }
+                </span>
+                <ChevronDown size={11} className={`transition-transform ${showSubtitleMenu ? 'rotate-180' : ''}`} />
+              </motion.button>
 
-            <AnimatePresence>
-              {showSubtitleMenu && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowSubtitleMenu(false)} />
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute top-full mt-2 left-0 w-48 rounded-xl overflow-hidden z-50 shadow-2xl"
-                    style={{
-                      background: 'rgba(10,10,22,0.98)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      backdropFilter: 'blur(24px)',
-                    }}
-                  >
-                    <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">
-                      Subtitles
-                    </p>
-                    {/* Off option */}
-                    <button
-                      onClick={() => { setSelectedSubtitle('off'); setShowSubtitleMenu(false); }}
-                      className={`flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left transition-all ${
-                        selectedSubtitle === 'off'
-                          ? 'bg-primary-500/15 text-white'
-                          : 'text-gray-300 hover:bg-white/[0.06] hover:text-white'
-                      }`}
+              <AnimatePresence>
+                {showSubtitleMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowSubtitleMenu(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute top-full mt-2 left-0 w-56 rounded-xl overflow-hidden z-50 shadow-2xl max-h-72 overflow-y-auto"
+                      style={{
+                        background: 'rgba(10,10,22,0.98)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        backdropFilter: 'blur(24px)',
+                      }}
                     >
-                      <MessageSquareOff size={13} className="flex-shrink-0" />
-                      <span className="font-medium">Off</span>
-                      {selectedSubtitle === 'off' && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
-                    </button>
-                    {/* Language options */}
-                    {subtitleTracks.map((track) => (
+                      <div className="flex items-center justify-between px-3 pt-3 pb-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                          Subtitles
+                        </p>
+                        {subtitlesReady && subtitleTracks.length > 0 && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-medium">
+                            {subtitleTracks.length} track{subtitleTracks.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Off option */}
                       <button
-                        key={track.srclang}
-                        onClick={() => { setSelectedSubtitle(track.srclang); setShowSubtitleMenu(false); }}
+                        onClick={() => { setSelectedSubtitle('off'); setShowSubtitleMenu(false); }}
                         className={`flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left transition-all ${
-                          selectedSubtitle === track.srclang
+                          selectedSubtitle === 'off'
                             ? 'bg-primary-500/15 text-white'
                             : 'text-gray-300 hover:bg-white/[0.06] hover:text-white'
                         }`}
                       >
-                        <Subtitles size={13} className="flex-shrink-0" />
-                        <span className="font-medium">{track.label}</span>
-                        {selectedSubtitle === track.srclang && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
+                        <MessageSquareOff size={13} className="flex-shrink-0" />
+                        <span className="font-medium">Off</span>
+                        {selectedSubtitle === 'off' && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
                       </button>
-                    ))}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
+
+                      {/* Available subtitle tracks from stream */}
+                      {subtitlesReady && subtitleTracks.length > 0 && (
+                        <div className="border-t border-white/[0.06] pt-1">
+                          <p className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-gray-500">
+                            Available
+                          </p>
+                          {subtitleTracks.map((track) => (
+                            <button
+                              key={track.srclang}
+                              onClick={() => { setSelectedSubtitle(track.srclang); setShowSubtitleMenu(false); }}
+                              className={`flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left transition-all ${
+                                selectedSubtitle === track.srclang
+                                  ? 'bg-primary-500/15 text-white'
+                                  : 'text-gray-300 hover:bg-white/[0.06] hover:text-white'
+                              }`}
+                            >
+                              <Subtitles size={13} className="flex-shrink-0" />
+                              <span className="font-medium">{track.label}</span>
+                              {selectedSubtitle === track.srclang && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* All language options (for manual selection) */}
+                      <div className="border-t border-white/[0.06] pt-1">
+                        <p className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-gray-500">
+                          All Languages
+                        </p>
+                        <div className="max-h-40 overflow-y-auto">
+                          {SUBTITLE_LANGUAGES.filter(l => l.code !== 'off').map((lang) => (
+                            <button
+                              key={lang.code}
+                              onClick={() => { setSelectedSubtitle(lang.code); setShowSubtitleMenu(false); }}
+                              className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-all ${
+                                selectedSubtitle === lang.code
+                                  ? 'bg-primary-500/15 text-white'
+                                  : 'text-gray-300 hover:bg-white/[0.06] hover:text-white'
+                              }`}
+                            >
+                              <span className="text-[10px] font-mono text-gray-500 w-6 flex-shrink-0 uppercase">
+                                {lang.code}
+                              </span>
+                              <span className="font-medium text-xs">{lang.name}</span>
+                              {selectedSubtitle === lang.code && <Check size={13} className="text-primary-400 ml-auto flex-shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Subtitle Settings button */}
+            <motion.button
+              onClick={() => setShowSubtitleSettings(true)}
+              className="flex items-center justify-center h-10 w-10 rounded-xl bg-zx-s3 border border-white/[0.08] text-gray-400 hover:text-white hover:border-white/15 transition-all"
+              whileTap={{ scale: 0.95 }}
+              title="Subtitle settings"
+            >
+              <Settings size={14} />
+            </motion.button>
           </div>
         )}
 
@@ -922,7 +1212,7 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {/* ── Septorch native video player ── */}
+          {/* ── Septorch native video player with styled subtitles ── */}
           {isSeptorch && !septorchLoading && !septorchError && septorchVideoUrl && (
             <video
               ref={videoRef}
@@ -932,7 +1222,7 @@ export default function VideoPlayer({
               autoPlay
               playsInline
               crossOrigin="anonymous"
-              className="absolute inset-0 w-full h-full"
+              className="absolute inset-0 w-full h-full zentrix-video-player"
               style={{ background: '#000' }}
             >
               {/* Subtitle tracks */}
@@ -993,12 +1283,19 @@ export default function VideoPlayer({
                   MP4
                 </span>
               )}
+              {/* Subtitle indicator */}
+              {isSeptorch && selectedSubtitle !== 'off' && subtitlesReady && (
+                <span className="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-primary-500/20 text-primary-300 flex items-center gap-0.5">
+                  <Subtitles size={8} />
+                  {subtitleTracks.find(t => t.srclang === selectedSubtitle)?.label || selectedSubtitle}
+                </span>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Septorch quality selector ───────────────────────────── */}
+      {/* ══ Septorch quality selector ═════════════════════════════ */}
       {isSeptorch && septorchData?.streams && septorchData.streams.length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
           <HardDrive size={14} className="text-emerald-400 flex-shrink-0" />
@@ -1022,7 +1319,7 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* ── MegaPlay info banner ──────────────────────────────── */}
+      {/* ══ MegaPlay info banner ════════════════════════════════ */}
       {isMegaplay && streamUrl && !megaplayLoading && (megaplayMeta?.method === 's-2' || megaplayMeta?.warning) && (
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-primary-500/[0.06] border border-primary-500/15">
           <Globe size={14} className="text-primary-400 flex-shrink-0 mt-0.5" />
@@ -1042,7 +1339,7 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* ── Ad-blocker nudge ── */}
+      {/* ═─ Ad-blocker nudge ── */}
       {currentServer.adNote && streamUrl && (
         <button
           onClick={() => setShowAdBlockGuide(true)}

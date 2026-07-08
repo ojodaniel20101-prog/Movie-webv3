@@ -709,6 +709,144 @@ body.drawer-open {
   max-width: 100vw;
 }
 
+/* ════════════════════════════════════════════════════════════
+   SUBTITLE STYLING — Matches cinverse appearance
+   ════════════════════════════════════════════════════════════ */
+
+/* Root CSS variables for subtitle styles (controlled by JS) */
+:root {
+  --sub-font-size: 18px;
+  --sub-text-color: #FFFFFF;
+  --sub-bg: rgba(0,0,0,0.55);
+  --sub-enabled: 1;
+}
+
+/* Native video subtitle track styling (::cue) */
+video::cue {
+  font-size: var(--sub-font-size) !important;
+  color: var(--sub-text-color) !important;
+  background: var(--sub-bg) !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7) !important;
+}
+
+/* WebKit browsers */
+video::-webkit-media-text-track-container {
+  font-size: var(--sub-font-size) !important;
+}
+
+video::-webkit-media-text-track-display {
+  font-size: var(--sub-font-size) !important;
+  color: var(--sub-text-color) !important;
+  background: var(--sub-bg) !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-weight: 600 !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7) !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+}
+
+/* Firefox */
+video::-moz-text-track-cue {
+  font-size: var(--sub-font-size) !important;
+  color: var(--sub-text-color) !important;
+  background: var(--sub-bg) !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-weight: 600 !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7) !important;
+}
+
+/* Cue backdrop (when background is enabled) */
+video::cue(
+) {
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 0 20px rgba(0,0,0,0.5) !important;
+}
+
+/* Subtitle preview text in settings modal */
+.subtitle-preview-text {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* Zentrix video player class for subtitle targeting */
+.zentrix-video-player {
+  /* Ensures subtitles render above video content */
+  position: relative;
+}
+
+.zentrix-video-player::cue {
+  opacity: var(--sub-enabled);
+  transition: opacity 0.3s ease;
+}
+
+/* Subtitle fade-in animation when tracks change */
+@keyframes subtitle-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+video.track-loaded::cue {
+  animation: subtitle-fade-in 0.4s ease-out;
+}
+
+/* ─── MOBILE SUBTITLE SIZING ──────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --sub-font-size: max(14px, calc(var(--sub-font-size) * 0.85));
+  }
+
+  video::cue {
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+  }
+
+  video::-webkit-media-text-track-display {
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --sub-font-size: max(12px, calc(var(--sub-font-size) * 0.75));
+  }
+
+  video::cue {
+    font-weight: 700 !important;
+    text-shadow: 0 1px 4px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.8) !important;
+  }
+}
+
+/* ─── SUBTITLE TEXT SHADOW VARIANTS ───────────────────────── */
+
+/* No background — stronger text shadow for readability */
+[data-subtitle-bg="none"] video::cue {
+  background: transparent !important;
+  text-shadow:
+    0 1px 3px rgba(0,0,0,0.95),
+    0 0 8px rgba(0,0,0,0.8),
+    0 0 20px rgba(0,0,0,0.6),
+    0 2px 4px rgba(0,0,0,0.9) !important;
+}
+
+/* Semi-transparent background */
+[data-subtitle-bg="semi"] video::cue {
+  background: rgba(0,0,0,0.55) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7) !important;
+}
+
+/* Full background */
+[data-subtitle-bg="full"] video::cue {
+  background: rgba(0,0,0,0.85) !important;
+  text-shadow: none !important;
+}
+
 /* ─── LANDSCAPE SUPPORT (§5) ──────────────────────────────── */
 @media (orientation: landscape) and (max-height: 500px) {
   .hero-section {
