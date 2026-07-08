@@ -337,7 +337,7 @@ export function srtToVtt(srtContent: string): string {
     // to 00:00:00.000 --> 00:00:00.000
     const convertedTime = timeLine
       .replace(/,(\d{3})/g, '.$1')
-      .replace(\n    ///g, ' ');
+      .replace(/\n/g, ' ');
 
     const text = lines.slice(textStart).join('\n');
     if (!text.trim()) continue;
