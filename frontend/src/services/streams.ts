@@ -173,7 +173,9 @@ const api = axios.create({
 export async function fetchSeptorchStreams(
   title: string,
   movieId?: string,
-  detailPath?: string
+  detailPath?: string,
+  season?: number,
+  episode?: number
 ): Promise<SeptorchResponse | null> {
   try {
     // If we don't have movieId/detailPath, search first
@@ -187,8 +189,9 @@ export async function fetchSeptorchStreams(
       detailPath = best.detail_path;
     }
 
+    const isTvShow = season && episode;
     const streamRes = await api.get(
-      `/septorch/streams?id=${movieId}&detailPath=${encodeURIComponent(detailPath || '')}`
+      `/septorch/streams?id=${movieId}&detailPath=${encodeURIComponent(detailPath || '')}${isTvShow ? `&season=${season}&episode=${episode}` : ''}`
     );
 
     if (!streamRes.data?.success) return null;
