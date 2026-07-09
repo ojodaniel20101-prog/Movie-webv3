@@ -512,9 +512,10 @@ export default function VideoPlayer({
         throw new Error('Invalid search result: missing id or detailPath');
       }
 
-      // Step 2: Get streams
+      // Step 2: Get streams (pass season/episode for TV shows)
+      const isTvShow = type === 'tv';
       const streamsRes = await fetch(
-        `/api/septorch/streams?id=${movieId}&detailPath=${encodeURIComponent(detailPath)}`,
+        `/api/septorch/streams?id=${movieId}&detailPath=${encodeURIComponent(detailPath)}${isTvShow ? `&season=${season || 1}&episode=${episode || 1}` : ''}`,
         { signal: abortRef.current.signal }
       );
       if (!streamsRes.ok) throw new Error(`Streams failed: HTTP ${streamsRes.status}`);
@@ -561,7 +562,7 @@ export default function VideoPlayer({
     } finally {
       setSeptorchLoading(false);
     }
-  }, [isSeptorch, title, type]);
+  }, [isSeptorch, title, type, season, episode]);
 
   // ── AnimeHeaven resolution ────────────────────────────────────────
   const resolveAnimeHeavenUrl = useCallback(async () => {
