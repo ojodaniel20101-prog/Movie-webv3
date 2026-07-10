@@ -164,6 +164,53 @@ function formatMovieDetails(data) {
   };
 }
 
+/**
+ * Convert SRT subtitle content to WebVTT format.
+ * Browsers natively support only WebVTT in <track> elements.
+ */
+function srtToVtt(srtContent) {
+  let vtt = 'WEBVTT\n\n';
+
+  // Normalize line endings
+  const normalized = srtContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Split into blocks (separated by blank lines)
+  const blocks = normalized.split('\n\n');
+
+  for (const block of blocks) {
+    const lines = block.trim().split('\n');
+    if (lines.length < 2) continue;
+
+    // Check if first line is a cue number
+    const hasId = /^\d+$/.test(lines[0].trim());
+    const timeLine = hasId ? lines[1] : lines[0];
+    const textStart = hasId ? 2 : 1;
+
+    // Convert time format: 00:00:00,000 --> 00:00:00,000
+    // to VTT format: 00:00:00.000 --> 00:00:00.000
+    const convertedTime = timeLine
+      .replace(/,(\d{3})/g, '.$1')
+      .replace(/\s*-->\s*/g, ' --> ');
+
+    // Validate time line format
+    if (!convertedTime.match(/\d{1,2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{1,2}:\d{2}:\d{2}\.\d{3}/)) {
+      continue;
+    }
+
+    const text = lines.slice(textStart).join('\n');
+    if (!text.trim()) continue;
+
+    // Add cue number for tracking
+    if (hasId) {
+      vtt += lines[0] + '\n';
+    }
+    vtt += convertedTime + '\n';
+    vtt += text + '\n\n';
+  }
+
+  return vtt;
+}
+
 function formatStreams(mediaData) {
   const downloads = mediaData?.data?.downloads?.data?.downloads || [];
   const captions = mediaData?.data?.downloads?.data?.captions || [];
@@ -514,19 +561,38 @@ router.get('/subtitle', async (req, res) => {
 
       // Detect content type from response or URL extension
       const contentType = proxyRes.headers['content-type'] || '';
-      if (contentType.includes('vtt') || subtitleUrl.endsWith('.vtt')) {
-        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-      } else if (contentType.includes('srt') || subtitleUrl.endsWith('.srt')) {
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      } else {
-        res.setHeader('Content-Type', contentType || 'text/plain; charset=utf-8');
-      }
+      const isVtt = contentType.includes('vtt') || subtitleUrl.endsWith('.vtt');
+      const isSrt = contentType.includes('srt') || subtitleUrl.endsWith('.srt') || subtitleUrl.includes('.srt');
 
-      // Set cache header to reduce repeated requests
-      res.setHeader('Cache-Control', 'public, max-age=3600');
+      // Collect response data
+      let data = '';
+      proxyRes.setEncoding('utf8');
+      proxyRes.on('data', (chunk) => { data += chunk; });
+      proxyRes.on('end', () => {
+        try {
+          let subtitleContent = data;
 
-      res.status(proxyRes.statusCode || 200);
-      proxyRes.pipe(res);
+          // Convert SRT to WebVTT if needed (browsers only support VTT natively)
+          if (isSrt || (!isVtt && subtitleContent.includes('-->') && !subtitleContent.trim().startsWith('WEBVTT'))) {
+            subtitleContent = srtToVtt(subtitleContent);
+          }
+
+          // Ensure WEBVTT header if missing
+          if (!subtitleContent.trim().startsWith('WEBVTT')) {
+            subtitleContent = 'WEBVTT\n\n' + subtitleContent;
+          }
+
+          res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          res.status(proxyRes.statusCode || 200).send(subtitleContent);
+        } catch (err) {
+          console.error('[Septorch] Subtitle conversion error:', err.message);
+          res.status(500).json({
+            success: false,
+            error: 'Subtitle conversion failed: ' + err.message,
+          });
+        }
+      });
     });
 
     proxyReq.on('error', (err) => {

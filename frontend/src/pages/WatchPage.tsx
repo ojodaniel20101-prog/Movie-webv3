@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, List, Star,
   Play, Info, Bookmark, BookmarkCheck, X, Loader2,
-  Layers, Radio, Clock, CalendarClock, Film,
+  Layers, Radio, Clock, CalendarClock, Film, MonitorPlay,
 } from 'lucide-react';
 import { getMovieDetails, getShowDetails, getSeasonDetails, getYear } from '@/services/tmdb';
 import { getAnimeById } from '@/services/anilist';
@@ -49,6 +49,7 @@ export default function WatchPage() {
   const navigate                        = useNavigate();
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [activeTab, setActiveTab]       = useState<'episodes' | 'seasons' | 'extras'>('episodes');
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
 
   const episode = Number(searchParams.get('episode') || 1);
   const season  = type === 'tv' ? Number(searchParams.get('season') || 1) : 1;
@@ -214,12 +215,77 @@ export default function WatchPage() {
         </div>
 
         <>
-            {/* ── AD-FREE SETUP NOTIFICATION ──────────────────── */}
-            <AdBlockBanner />
+          {/* ── AD-FREE SETUP NOTIFICATION ──────────────────── */}
+          <AdBlockBanner />
 
-            {/* ── PLAYER ────────────────────────────────────── */}
-            <VideoPlayer tmdbId={type==='movie'||type==='tv'?Number(id):0} anilistId={anilistId}
-              type={contentType} season={season} episode={episode} title={title} isAnime={isAnime}/>
+          {/* ── WATCH NOW BUTTON ────────────────────────────── */}
+          <motion.button
+            onClick={() => setIsPlayerOpen(true)}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full relative rounded-2xl overflow-hidden group cursor-pointer"
+            style={{
+              aspectRatio: '16/9',
+              background: 'linear-gradient(135deg, rgba(20,20,35,0.95) 0%, rgba(10,10,20,0.98) 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {/* Backdrop image */}
+            {backdropPath && (
+              <img
+                src={`https://image.tmdb.org/t/p/w1280${backdropPath}`}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-50 transition-opacity duration-300"
+              />
+            )}
+            {!backdropPath && anime?.bannerImage && (
+              <img
+                src={anime.bannerImage}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-50 transition-opacity duration-300"
+              />
+            )}
+            {/* Gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+
+            {/* Play button */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <motion.div
+                className="w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center"
+                style={{
+                  background: 'rgba(123, 111, 240, 0.2)',
+                  border: '2px solid rgba(123, 111, 240, 0.5)',
+                  backdropFilter: 'blur(8px)',
+                }}
+                whileHover={{ scale: 1.08, background: 'rgba(123, 111, 240, 0.3)' }}
+              >
+                <Play size={28} className="text-white ml-1" fill="white" />
+              </motion.div>
+              <p className="text-white font-semibold text-sm md:text-base">Watch Now</p>
+              <p className="text-gray-500 text-xs">Click to start streaming</p>
+            </div>
+
+            {/* Quality badge */}
+            <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-lg"
+              style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
+            >
+              <MonitorPlay size={12} className="text-gray-400" />
+              <span className="text-[10px] text-gray-400 font-medium">HD</span>
+            </div>
+          </motion.button>
+
+          {/* ── MODAL PLAYER ────────────────────────────────── */}
+          <VideoPlayer
+            tmdbId={type==='movie'||type==='tv'?Number(id):0}
+            anilistId={anilistId}
+            type={contentType}
+            season={season}
+            episode={episode}
+            title={title}
+            isAnime={isAnime}
+            isOpen={isPlayerOpen}
+            onClose={() => setIsPlayerOpen(false)}
+          />
         </>
 
         {/* ── PREV / NEXT ───────────────────────────────── */}
