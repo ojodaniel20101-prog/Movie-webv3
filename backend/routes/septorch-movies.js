@@ -167,43 +167,54 @@ function formatMovieDetails(data) {
 /**
  * Convert SRT subtitle content to WebVTT format.
  * Browsers natively support only WebVTT in <track> elements.
+ * Handles edge cases: varying millisecond digits, malformed cues, empty content.
  */
 function srtToVtt(srtContent) {
+  if (!srtContent || typeof srtContent !== 'string') {
+    return 'WEBVTT\n\n';
+  }
+
   let vtt = 'WEBVTT\n\n';
 
   // Normalize line endings
-  const normalized = srtContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const normalized = srtContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
-  // Split into blocks (separated by blank lines)
-  const blocks = normalized.split('\n\n');
+  if (!normalized) {
+    return vtt;
+  }
+
+  // Split into blocks (separated by one or more blank lines)
+  const blocks = normalized.split(/\n\n+/);
 
   for (const block of blocks) {
-    const lines = block.trim().split('\n');
+    const lines = block.split('\n').filter(line => line.trim() !== '');
     if (lines.length < 2) continue;
 
-    // Check if first line is a cue number
-    const hasId = /^\d+$/.test(lines[0].trim());
-    const timeLine = hasId ? lines[1] : lines[0];
-    const textStart = hasId ? 2 : 1;
+    // Skip cue number if present
+    let timeLineIndex = 0;
+    if (/^\s*\d+\s*$/.test(lines[0])) {
+      timeLineIndex = 1;
+    }
 
-    // Convert time format: 00:00:00,000 --> 00:00:00,000
-    // to VTT format: 00:00:00.000 --> 00:00:00.000
+    if (timeLineIndex >= lines.length) continue;
+
+    const timeLine = lines[timeLineIndex];
+
+    // Convert SRT time format to VTT:
+    // 00:00:00,000 --> 00:00:00,000  →  00:00:00.000 --> 00:00:00.000
+    // Also handles 1-3 digit milliseconds and optional cue settings after -->
     const convertedTime = timeLine
-      .replace(/,(\d{3})/g, '.$1')
+      .replace(/,(\d{1,3})/g, (match, ms) => `.${ms.padStart(3, '0')}`)
       .replace(/\s*-->\s*/g, ' --> ');
 
-    // Validate time line format
-    if (!convertedTime.match(/\d{1,2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{1,2}:\d{2}:\d{2}\.\d{3}/)) {
+    // Validate time line: HH:MM:SS.mmm --> HH:MM:SS.mmm [optional settings]
+    if (!/^\d{1,2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{1,2}:\d{2}:\d{2}\.\d{3}/.test(convertedTime)) {
       continue;
     }
 
-    const text = lines.slice(textStart).join('\n');
+    const text = lines.slice(timeLineIndex + 1).join('\n');
     if (!text.trim()) continue;
 
-    // Add cue number for tracking
-    if (hasId) {
-      vtt += lines[0] + '\n';
-    }
     vtt += convertedTime + '\n';
     vtt += text + '\n\n';
   }
@@ -554,21 +565,37 @@ router.get('/subtitle', async (req, res) => {
       timeout: REQUEST_TIMEOUT,
     };
 
+    let responseStarted = false;
+
     const proxyReq = client.request(options, (proxyRes) => {
+      responseStarted = true;
+
+      // Check upstream status before processing
+      if (proxyRes.statusCode >= 400) {
+        if (!res.headersSent) {
+          return res.status(502).json({
+            success: false,
+            error: `Upstream subtitle server returned ${proxyRes.statusCode}`,
+          });
+        }
+        return;
+      }
+
       // Set CORS headers to allow browser to load the subtitle
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET');
 
       // Detect content type from response or URL extension
       const contentType = proxyRes.headers['content-type'] || '';
-      const isVtt = contentType.includes('vtt') || subtitleUrl.endsWith('.vtt');
-      const isSrt = contentType.includes('srt') || subtitleUrl.endsWith('.srt') || subtitleUrl.includes('.srt');
+      const isVtt = contentType.includes('vtt') || subtitleUrl.toLowerCase().endsWith('.vtt');
+      const isSrt = contentType.includes('srt') || subtitleUrl.toLowerCase().endsWith('.srt') || subtitleUrl.toLowerCase().includes('.srt');
 
       // Collect response data
       let data = '';
       proxyRes.setEncoding('utf8');
       proxyRes.on('data', (chunk) => { data += chunk; });
       proxyRes.on('end', () => {
+        if (res.headersSent) return;
         try {
           let subtitleContent = data;
 
@@ -584,12 +611,24 @@ router.get('/subtitle', async (req, res) => {
 
           res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
           res.setHeader('Cache-Control', 'public, max-age=3600');
-          res.status(proxyRes.statusCode || 200).send(subtitleContent);
+          res.status(200).send(subtitleContent);
         } catch (err) {
           console.error('[Septorch] Subtitle conversion error:', err.message);
-          res.status(500).json({
+          if (!res.headersSent) {
+            res.status(500).json({
+              success: false,
+              error: 'Subtitle conversion failed: ' + err.message,
+            });
+          }
+        }
+      });
+
+      proxyRes.on('error', (err) => {
+        console.error('[Septorch] Subtitle response stream error:', err.message);
+        if (!res.headersSent) {
+          res.status(502).json({
             success: false,
-            error: 'Subtitle conversion failed: ' + err.message,
+            error: 'Subtitle stream error: ' + err.message,
           });
         }
       });
@@ -597,27 +636,33 @@ router.get('/subtitle', async (req, res) => {
 
     proxyReq.on('error', (err) => {
       console.error('[Septorch] Subtitle proxy error:', err.message);
-      res.status(502).json({
-        success: false,
-        error: 'Failed to fetch subtitle: ' + err.message,
-      });
+      if (!res.headersSent) {
+        res.status(502).json({
+          success: false,
+          error: 'Failed to fetch subtitle: ' + err.message,
+        });
+      }
     });
 
     proxyReq.on('timeout', () => {
       proxyReq.destroy();
-      res.status(504).json({
-        success: false,
-        error: 'Subtitle request timed out',
-      });
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          error: 'Subtitle request timed out',
+        });
+      }
     });
 
     proxyReq.end();
   } catch (err) {
     console.error('[Septorch] Subtitle proxy error:', err.message);
-    res.status(500).json({
-      success: false,
-      error: 'Subtitle proxy failed: ' + (err.message || 'Unknown error'),
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Subtitle proxy failed: ' + (err.message || 'Unknown error'),
+      });
+    }
   }
 });
 

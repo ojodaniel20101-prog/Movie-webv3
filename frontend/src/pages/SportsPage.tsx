@@ -81,6 +81,29 @@ const SPORTS = [
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// ─── Utility: Format Match Time ──────────────────────────────────────────────
+function formatMatchTime(timestamp: number | null): string {
+  if (!timestamp) return 'TBD';
+
+  const now = new Date();
+  const date = new Date(timestamp * 1000);
+
+  // Reset hours to compare dates only
+  const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const matchDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const diffMs = matchDate.getTime() - nowDate.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  if (diffDays === 0) return `Today ${timeStr}`;
+  if (diffDays === 1) return `Tomorrow ${timeStr}`;
+
+  const weekday = date.toLocaleDateString([], { weekday: 'long' });
+  return `${weekday} ${timeStr}`;
+}
+
 // ─── Utility: Skeleton Shimmer ───────────────────────────────────────────────
 function SkeletonShimmer({ className = '' }: { className?: string }) {
   return (
@@ -333,7 +356,7 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
             {match.startTime && (
               <span className="flex items-center gap-1">
                 <Calendar size={10} />
-                {new Date(match.startTime * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {formatMatchTime(match.startTime)}
               </span>
             )}
           </div>
@@ -578,9 +601,7 @@ function MatchCard({ match, onPlay, onViewDetails, source, index }: {
             </p>
           ) : (
             <p className="text-sm font-bold" style={{ color: '#f0c040' }}>
-              {match.startTime
-                ? new Date(match.startTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : 'TBD'}
+              {formatMatchTime(match.startTime)}
             </p>
           )}
           {match.round && <p className="text-[9px]" style={{ color: '#8899AA' }}>{match.round}</p>}
