@@ -143,7 +143,7 @@ export default function ProfilePage() {
         { icon: UserIcon,  label: 'Edit Display Name',  action: () => setEditingName(true)     },
         { icon: FileText,  label: 'Edit Bio',           action: () => setEditingBio(true)      },
         { icon: MapPin,    label: 'Set Location',       action: () => setEditingLoc(true)      },
-        { icon: Bell,      label: 'Notifications',      action: () => toast('Coming soon — notifications') },
+        { icon: Bell,      label: 'Notifications',      action: () => navigate('/notifications') },
         { icon: Lock,      label: 'Privacy',            action: () => toast('Coming soon — privacy controls') },
       ],
     },

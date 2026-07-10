@@ -10,21 +10,22 @@ import { useLiveTvStore } from '@/store/useLiveTvStore';
 import { useLivePreconnect } from '@/hooks/useLivePreconnect';
 
 // Lazy pages
-const HomePage        = lazy(() => import('@/pages/HomePage'));
-const SearchPage      = lazy(() => import('@/pages/SearchPage'));
-const DetailsPage     = lazy(() => import('@/pages/DetailsPage'));
-const WatchPage       = lazy(() => import('@/pages/WatchPage'));
-const WatchlistPage   = lazy(() => import('@/pages/WatchlistPage'));
-const ProfilePage     = lazy(() => import('@/pages/ProfilePage'));
-const AuthPage        = lazy(() => import('@/pages/AuthPage'));
-const BrowsePage      = lazy(() => import('@/pages/BrowsePage'));
-const AdminPage       = lazy(() => import('@/pages/AdminPage'));
-const TrailersPage    = lazy(() => import('@/pages/TrailersPage'));
-const SupportChatPage = lazy(() => import('@/pages/SupportChatPage'));
-const LiveTVPage      = lazy(() => import('@/pages/LiveTVPage'));
-const AnimePage       = lazy(() => import('@/pages/AnimePage'));
-const SportsPage      = lazy(() => import('@/pages/SportsPage'));
-const WrestlingPage   = lazy(() => import('@/pages/WrestlingPage'));
+const HomePage                  = lazy(() => import('@/pages/HomePage'));
+const SearchPage                = lazy(() => import('@/pages/SearchPage'));
+const DetailsPage               = lazy(() => import('@/pages/DetailsPage'));
+const WatchPage                 = lazy(() => import('@/pages/WatchPage'));
+const WatchlistPage             = lazy(() => import('@/pages/WatchlistPage'));
+const ProfilePage               = lazy(() => import('@/pages/ProfilePage'));
+const AuthPage                  = lazy(() => import('@/pages/AuthPage'));
+const BrowsePage                = lazy(() => import('@/pages/BrowsePage'));
+const AdminPage                 = lazy(() => import('@/pages/AdminPage'));
+const TrailersPage              = lazy(() => import('@/pages/TrailersPage'));
+const SupportChatPage           = lazy(() => import('@/pages/SupportChatPage'));
+const LiveTVPage                = lazy(() => import('@/pages/LiveTVPage'));
+const AnimePage                 = lazy(() => import('@/pages/AnimePage'));
+const SportsPage                = lazy(() => import('@/pages/SportsPage'));
+const WrestlingPage             = lazy(() => import('@/pages/WrestlingPage'));
+const NotificationSettingsPage  = lazy(() => import('@/pages/NotificationSettingsPage'));
 
 // Lazy components — hls.js is ~150KB+ and only needed once a channel
 // is actually playing, so this must NOT be in the eager/main bundle.
@@ -156,6 +157,7 @@ function AppRoutes() {
                 <Route path="/favorites"           element={<Navigate to="/watchlist" replace />} />
                 <Route path="/history"             element={<Navigate to="/watchlist" replace />} />
                 <Route path="/profile"             element={<ProfilePage />} />
+                <Route path="/notifications"       element={<NotificationSettingsPage />} />
                 <Route path="/support"             element={<SupportChatPage />} />
                 <Route path="/anime"               element={<AnimePage />} />
                 <Route path="/sports"              element={<SportsPage />} />

@@ -28,13 +28,12 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Server, Globe, ChevronDown,
-  AlertCircle, RefreshCw, ExternalLink, Shield, Check, Loader2,
+  AlertCircle, RefreshCw, ExternalLink, Check, Loader2,
   Mic, Link2, Zap, Clapperboard, Download, Film, HardDrive,
   Subtitles, MessageSquareOff, Settings, Type, Palette, RectangleHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import type { ContentType } from '@/types';
-import AdBlockGuideModal from '@/components/adblock/AdBlockGuideModal';
 import {
   loadSubtitleSettings,
   saveSubtitleSettings,
@@ -360,7 +359,6 @@ export default function VideoPlayer({
   const [serverMenu, setServerMenu] = useState(false);
   const [iframeKey,  setIframeKey]  = useState(0);
   const [hasError,   setHasError]   = useState(false);
-  const [showAdBlockGuide, setShowAdBlockGuide] = useState(false);
 
   // ── MegaPlay async resolution state ─────────────────────────────
   const [megaplayUrl,     setMegaplayUrl]     = useState<string | null>(null);
@@ -830,6 +828,31 @@ export default function VideoPlayer({
                     </button>
                   ))}
 
+                  {/* Quality selection (Septorch only) — moved here for clean player */}
+                  {isSeptorch && septorchData?.streams && septorchData.streams.length > 0 && (
+                    <div className="px-4 py-3 border-t border-white/[0.06]">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-2">
+                        Quality
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {septorchData.streams.map((stream: SeptorchStream) => (
+                          <button
+                            key={stream.quality}
+                            onClick={() => handleSeptorchQualityChange(stream.quality)}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                              selectedQuality === stream.quality
+                                ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-white/[0.04] text-gray-500 border border-white/[0.06] hover:text-gray-300'
+                            }`}
+                          >
+                            {stream.quality}
+                            <span className="text-[9px] text-gray-600 ml-1">({stream.size_mb}MB)</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="px-4 py-3 border-t border-white/[0.06]">
                     <p className="text-[10px] text-gray-600 leading-relaxed flex items-start gap-1.5">
                       <Globe size={11} className="text-cyan-400 flex-shrink-0 mt-px" />
@@ -1074,7 +1097,7 @@ export default function VideoPlayer({
       <div className="relative w-full">
         <div
           className="relative w-full rounded-2xl overflow-hidden border border-white/[0.07] shadow-cinematic bg-black"
-          style={{ paddingBottom: '56.25%' }}
+          style={{ aspectRatio: '16/9' }}
         >
 
           {/* ── AnimeHeaven loading ── */}
@@ -1115,7 +1138,7 @@ export default function VideoPlayer({
               controls
               autoPlay
               playsInline
-              className="absolute inset-0 w-full h-full"
+              className="absolute inset-0 w-full h-full object-cover"
               style={{ background: '#000' }}
             />
           )}
@@ -1223,7 +1246,7 @@ export default function VideoPlayer({
               autoPlay
               playsInline
               crossOrigin="anonymous"
-              className="absolute inset-0 w-full h-full zentrix-video-player"
+              className="absolute inset-0 w-full h-full object-cover zentrix-video-player"
               style={{ background: '#000' }}
             >
               {/* Subtitle tracks */}
@@ -1258,110 +1281,16 @@ export default function VideoPlayer({
             />
           )}
 
-          {/* Status badge */}
-          {!megaplayLoading && !septorchLoading && (
-            <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10 text-[10px] text-gray-400 font-medium z-10 pointer-events-none">
-              <Shield size={9} className="text-green-500" />
-              <currentServer.icon size={10} style={{ color: currentServer.iconColor }} />
-              {currentServer.label}
-              {isMegaplay && megaplayMeta?.method && (
-                <span className={`ml-1 flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-bold ${
-                  megaplayMeta.method === 's-2'
-                    ? 'bg-cyan-500/20 text-cyan-400'
-                    : megaplayMeta.method === 'ani-unverified'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-green-500/20 text-green-400'
-                }`}>
-                  {megaplayMeta.method === 's-2'
-                    ? 's-2'
-                    : megaplayMeta.method === 'ani-unverified'
-                      ? <AlertCircle size={9} />
-                      : <Check size={9} />}
-                </span>
-              )}
-              {isSeptorch && septorchData && (
-                <span className="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">
-                  MP4
-                </span>
-              )}
-              {/* Subtitle indicator */}
-              {isSeptorch && selectedSubtitle !== 'off' && subtitlesReady && (
-                <span className="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-primary-500/20 text-primary-300 flex items-center gap-0.5">
-                  <Subtitles size={8} />
-                  {subtitleTracks.find(t => t.srclang === selectedSubtitle)?.label || selectedSubtitle}
-                </span>
-              )}
-            </div>
-          )}
+          {/* Clean player — no visible server/URL info */}
         </div>
       </div>
 
-      {/* ══ Septorch quality selector ═════════════════════════════ */}
-      {isSeptorch && septorchData?.streams && septorchData.streams.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
-          <HardDrive size={14} className="text-emerald-400 flex-shrink-0" />
-          <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-emerald-400/80 font-medium">Quality:</span>
-            {septorchData.streams.map((stream: SeptorchStream) => (
-              <button
-                key={stream.quality}
-                onClick={() => handleSeptorchQualityChange(stream.quality)}
-                className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                  selectedQuality === stream.quality
-                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-white/[0.04] text-gray-500 border border-white/[0.06] hover:text-gray-300'
-                }`}
-              >
-                {stream.quality}
-                <span className="text-[9px] text-gray-600 ml-1">({stream.size_mb}MB)</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Quality selector moved to server menu for clean player */}
 
-      {/* ══ MegaPlay info banner ════════════════════════════════ */}
-      {isMegaplay && streamUrl && !megaplayLoading && (megaplayMeta?.method === 's-2' || megaplayMeta?.warning) && (
-        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-primary-500/[0.06] border border-primary-500/15">
-          <Globe size={14} className="text-primary-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0 space-y-0.5">
-            {megaplayMeta?.method === 's-2' && (
-              <p className="text-[11px] text-cyan-500/80">
-                Resolved via backup endpoint (primary lookup failed)
-              </p>
-            )}
-            {megaplayMeta?.warning && (
-              <p className="text-[10px] text-amber-400/70 flex items-start gap-1">
-                <AlertCircle size={10} className="flex-shrink-0 mt-px" />
-                {megaplayMeta.warning}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Server info banners hidden for clean player */}
 
-      {/* ═─ Ad-blocker nudge ── */}
-      {currentServer.adNote && streamUrl && (
-        <button
-          onClick={() => setShowAdBlockGuide(true)}
-          className="w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 text-left transition-colors hover:bg-amber-500/[0.09]"
-        >
-          <Shield size={14} className="text-amber-400 flex-shrink-0 mt-px" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-amber-300 font-semibold mb-0.5">Get the ad-free experience</p>
-            <p className="text-[10px] text-gray-500 leading-relaxed">
-              This server works best with an ad blocker enabled. Tap for a quick one-time setup guide.
-            </p>
-          </div>
-          <ChevronDown size={13} className="text-amber-400/60 flex-shrink-0 -rotate-90 mt-0.5" />
-        </button>
-      )}
+      {/* Ad-block nudge hidden for clean player */}
 
-      <p className="text-[10px] text-gray-700 text-center">
-        Switch servers if a stream doesn&apos;t load
-      </p>
-
-      <AdBlockGuideModal isOpen={showAdBlockGuide} onClose={() => setShowAdBlockGuide(false)} />
     </div>
   );
 }
