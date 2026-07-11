@@ -123,6 +123,7 @@ async function fetchMatches(sport = 'football', date = null) {
     const rawMatches = data.matches || [];
 
     // Normalize to unified format
+    const CV_BASE = 'https://cinverse.com.ng';
     const matches = rawMatches.map(m => ({
       id: m.id || '',
       slug: m.slug || m.id || '',
@@ -137,8 +138,8 @@ async function fetchMatches(sport = 'football', date = null) {
       league: m.league || '',
       startTime: m.startTime || null,
       source: m.source || 'cinverse',
-      homeTeamLogo: m.homeTeamLogo || '',
-      awayTeamLogo: m.awayTeamLogo || '',
+      homeTeamLogo: m.homeTeamLogo ? `/api/sports/logo-proxy?url=${encodeURIComponent(m.homeTeamLogo.startsWith('http') ? m.homeTeamLogo : `${CV_BASE}${m.homeTeamLogo}`)}` : '',
+      awayTeamLogo: m.awayTeamLogo ? `/api/sports/logo-proxy?url=${encodeURIComponent(m.awayTeamLogo.startsWith('http') ? m.awayTeamLogo : `${CV_BASE}${m.awayTeamLogo}`)}` : '',
       channelCount: m.channelCount || 0,
       channels: m.channels || [],
       scrapedAt: new Date().toISOString(),
@@ -397,6 +398,37 @@ router.get('/stream-proxy', async (req, res) => {
     }
 
     streamResp.body.pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/sports/logo-proxy ─────────────────────────────────────────────
+// Proxy team logos from Cineverse with proper authentication headers
+router.get('/logo-proxy', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  try {
+    const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+    const logoResp = await fetch(url, {
+      headers: {
+        ...HEADERS,
+        'Referer': 'https://cinverse.com.ng/football',
+      },
+      timeout: 10000,
+    });
+
+    if (!logoResp.ok) {
+      return res.status(logoResp.status).send('Logo fetch failed');
+    }
+
+    const contentType = logoResp.headers.get('content-type') || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    logoResp.body.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
