@@ -1,198 +1,215 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * SPORTS API ROUTE — Live Match Data & Streams
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Primary Source: Cineverse (cinverse.com.ng)
+ *   - GET /api/football/matches — Match listings by date/sport
+ *   - GET /api/football/match/<id> — Match details & stream tokens
+ *   - GET /api/sports/streams?source=cinverse&id=<id> — Stream extraction
+ *
+ * Endpoints provided:
+ *   GET  /api/sports/matches?sport=football&date=YYYY-MM-DD
+ *   GET  /api/sports/match/:id
+ *   GET  /api/sports/stream?source=<source>&id=<match_id>
+ *   GET  /api/sports/stream-proxy?url=<m3u8_url>
+ *   POST /api/sports/test-streams
+ *
+ * Cache: 60-second TTL for match lists
+ */
+
 const express = require('express');
-const router  = express.Router();
+const router = express.Router();
+const { extractStream, proxyStream } = require('./streamfinder');
 
-// ─── Config ────────────────────────────────────────────────────────────────
-const DOMAINS = [
-  'https://sportslivetoday.com',
-  'https://thesports.today',
-  'https://moviebox.pk',
-  'https://moviebox.ph',
-  'https://moviebox.co',
-];
+// ─── Config ─────────────────────────────────────────────────────────────────
 
-const BROWSER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
-  'Referer': 'https://sportslivetoday.com/',
 };
 
 const STREAM_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'Accept': '*/*',
-  'Referer': 'https://thesports.today/',
-  'Origin': 'https://thesports.today',
+  'Referer': 'https://cinverse.com.ng/',
 };
 
 const STATUS_MAP = {
-  MatchNotStart: 'UPCOMING',
-  MatchIng:      'LIVE',
-  MatchEnded:    'FINISHED',
-  MatchEnd:      'FINISHED',
-  HalfTime:      'HALF_TIME',
-  NoStart:       'UPCOMING',
-  Finished:      'FINISHED',
+  upcoming: 'UPCOMING',
+  live: 'LIVE',
+  finished: 'FINISHED',
+  halftime: 'HALF_TIME',
+  ended: 'FINISHED',
 };
 
-// Cache
+// ─── Cache ──────────────────────────────────────────────────────────────────
+
 const cache = {};
-const CACHE_TTL = 60 * 1000;
+const CACHE_TTL = 60 * 1000; // 60 seconds
+
+// Cineverse session cache
+let cvSession = null;
+let cvSessionExpiry = 0;
+const SESSION_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Stream test cache: url -> { ms, ok, testedAt }
 const streamCache = {};
 const STREAM_CACHE_TTL = 2 * 60 * 1000;
 
-// ─── Nuxt Ref Resolver ──────────────────────────────────────────────────────
-function resolveNuxtRef(payload, ref, depth = 0, visited = new Set()) {
-  if (depth > 12 || visited.has(ref)) return null;
-  if (typeof ref !== 'number' || ref < 0 || ref >= payload.length) return ref;
-  visited = new Set(visited);
-  visited.add(ref);
-  const value = payload[ref];
-  if (value === null || value === undefined) return value;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value)) return value.map(item => resolveNuxtRef(payload, item, depth + 1, visited));
-  if (typeof value === 'object') {
-    const result = {};
-    for (const [key, val] of Object.entries(value)) {
-      if (!key.startsWith('$')) result[key] = resolveNuxtRef(payload, val, depth + 1, visited);
-    }
-    return result;
-  }
-  return value;
-}
+// ─── Cineverse Session Manager ──────────────────────────────────────────────
 
-// ─── Extract m3u8 ──────────────────────────────────────────────────────────
-function extractM3u8(url) {
-  if (!url) return null;
-  if (url.includes('.m3u8') && !url.includes('url=')) return url;
-  if (url.includes('.m3u8') && url.includes('url=')) {
-    const m = url.match(/[?&]url=(https?:\/\/[^&]+\.m3u8)/);
-    if (m) return m[1];
-  }
-  if (url.startsWith('http')) return url;
-  return null;
-}
-
-// ─── Parse Nuxt Payload ─────────────────────────────────────────────────────
-function parseNuxtMatches(payload) {
-  const matches = [];
-  if (!Array.isArray(payload)) return matches;
-
-  for (let i = 0; i < payload.length; i++) {
-    const item = payload[i];
-    if (item && typeof item === 'object' && 'team1' in item && 'team2' in item) {
-      try {
-        const match = resolveNuxtRef(payload, i);
-        if (!match || typeof match !== 'object') continue;
-
-        const team1 = match.team1 || {};
-        const team2 = match.team2 || {};
-
-        // Extract streams — same logic as v3 Python
-        const streams = [];
-
-        const playPath = match.playPath || '';
-        if (playPath && playPath.includes('.m3u8')) {
-          streams.push({ name: 'Primary HD', url: playPath, type: 'm3u8', quality: 'HD' });
-        }
-
-        for (const ch of (match.playSource || [])) {
-          if (ch && typeof ch === 'object') {
-            const chPath = ch.path || '';
-            if (chPath) {
-              const m3u8 = extractM3u8(chPath);
-              streams.push({
-                name: ch.title || 'Channel',
-                url: m3u8 || chPath,
-                type: m3u8 ? 'm3u8' : 'player',
-                quality: 'HD',
-              });
-            }
-          }
-        }
-
-        // Period scores
-        const t1Info = match.teamMatchInfo1 || {};
-        const t2Info = match.teamMatchInfo2 || {};
-        const t1Scores = t1Info.scores || [];
-        const t2Scores = t2Info.scores || [];
-        const periodNames = ['1H', '2H', 'ET1', 'ET2', 'P1', 'P2', 'P3'];
-        const periodScores = t1Scores.slice(0, t2Scores.length).map((s1, idx) => ({
-          name: periodNames[idx] || `P${idx + 1}`,
-          home: s1,
-          away: t2Scores[idx],
-        }));
-
-        let startTime = 0;
-        try { startTime = parseInt(match.startTime || 0) / 1000; } catch {}
-
-        const rawStatus = match.status || 'Unknown';
-
-        matches.push({
-          id:           String(match.id || ''),
-          sport_type:   match.type || 'football',
-          homeTeam:     team1.name || 'Unknown',
-          awayTeam:     team2.name || 'Unknown',
-          homeScore:    String(team1.score ?? '-'),
-          awayScore:    String(team2.score ?? '-'),
-          homeAbbr:     team1.abbreviation || '',
-          awayAbbr:     team2.abbreviation || '',
-          homeLogo:     team1.avatar || '',
-          awayLogo:     team2.avatar || '',
-          status:       STATUS_MAP[rawStatus] || rawStatus,
-          rawStatus,
-          statusLive:   match.statusLive || '',
-          league:       match.league || '',
-          round:        match.matchRound || '',
-          startTime,
-          streams,
-          periodScores,
-          scrapedAt:    new Date().toISOString(),
-        });
-      } catch { continue; }
-    }
-  }
-  return matches;
-}
-
-// ─── Fetch Matches ──────────────────────────────────────────────────────────
-async function fetchMatches(sport = 'football') {
+async function getCvSession() {
   const now = Date.now();
-  if (cache[sport] && now - cache[sport].lastFetch < CACHE_TTL) {
-    return cache[sport].data;
+  if (cvSession && now - cvSessionExpiry < SESSION_TTL) {
+    return cvSession;
+  }
+
+  try {
+    const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+    const resp = await fetch('https://cinverse.com.ng/football', {
+      headers: HEADERS,
+      redirect: 'follow',
+    });
+
+    const cookies = resp.headers.raw()['set-cookie'];
+    const cookieStr = cookies ? cookies.map(c => c.split(';')[0]).join('; ') : '';
+
+    cvSession = { cookies: cookieStr };
+    cvSessionExpiry = now;
+    return cvSession;
+  } catch (err) {
+    return cvSession || { cookies: '' };
+  }
+}
+
+// ─── Fetch Matches from Cineverse ───────────────────────────────────────────
+
+async function fetchMatches(sport = 'football', date = null) {
+  const cacheKey = `${sport}:${date || 'today'}`;
+  const now = Date.now();
+
+  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < CACHE_TTL) {
+    return cache[cacheKey].data;
   }
 
   const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+  const session = await getCvSession();
 
-  for (const domain of DOMAINS) {
-    try {
-      const url = `${domain.replace(/\/$/, '')}/_payload.json?live&sportType=${sport}`;
-      const resp = await fetch(url, { headers: BROWSER_HEADERS, timeout: 12000 });
-      if (resp.ok) {
-        const text = await resp.text();
-        if (text.length < 1000) continue;
-        const payload = JSON.parse(text);
-        const raw = parseNuxtMatches(payload);
-        // Deduplicate by match ID
-        const seen = new Set();
-        const matches = raw.filter(m => {
-          if (seen.has(m.id)) return false;
-          seen.add(m.id);
-          return true;
-        });
-        if (matches.length > 0) {
-          cache[sport] = { data: matches, lastFetch: now };
-          return matches;
-        }
-      }
-    } catch { continue; }
+  // Default to today if no date
+  if (!date) {
+    date = new Date().toISOString().slice(0, 10);
   }
 
-  return cache[sport]?.data || [];
+  try {
+    const url = `https://cinverse.com.ng/api/football/matches?sport=${encodeURIComponent(sport)}&date=${date}`;
+    const resp = await fetch(url, {
+      headers: {
+        ...HEADERS,
+        'Accept': 'application/json',
+        'Referer': 'https://cinverse.com.ng/football',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Cookie': session.cookies,
+      },
+      timeout: 15000,
+    });
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const rawMatches = data.matches || [];
+
+    // Normalize to unified format
+    const matches = rawMatches.map(m => ({
+      id: m.id || '',
+      slug: m.slug || m.id || '',
+      sport_type: m.sportType || sport,
+      homeTeam: m.homeTeam || 'Unknown',
+      awayTeam: m.awayTeam || 'Unknown',
+      homeScore: m.homeScore ?? '-',
+      awayScore: m.awayScore ?? '-',
+      status: STATUS_MAP[m.status] || m.status || 'UPCOMING',
+      rawStatus: m.status || 'unknown',
+      minute: m.minute || null,
+      league: m.league || '',
+      startTime: m.startTime || null,
+      source: m.source || 'cinverse',
+      homeTeamLogo: m.homeTeamLogo || '',
+      awayTeamLogo: m.awayTeamLogo || '',
+      channelCount: m.channelCount || 0,
+      channels: m.channels || [],
+      scrapedAt: new Date().toISOString(),
+    }));
+
+    // Sort: LIVE first, then UPCOMING, then FINISHED
+    const statusOrder = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
+    matches.sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4));
+
+    const result = {
+      matches,
+      sport,
+      date,
+      source: 'cinverse',
+      total: matches.length,
+    };
+
+    cache[cacheKey] = { data: result, lastFetch: now };
+    return result;
+
+  } catch (err) {
+    // Return cached data if available, otherwise error
+    if (cache[cacheKey]?.data) {
+      return cache[cacheKey].data;
+    }
+    return { matches: [], sport, date, source: 'cinverse', total: 0, error: err.message };
+  }
+}
+
+// ─── Fetch Single Match Detail ──────────────────────────────────────────────
+
+async function fetchMatchDetail(matchSlug) {
+  const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+  const session = await getCvSession();
+
+  try {
+    const resp = await fetch(`https://cinverse.com.ng/api/football/match/${encodeURIComponent(matchSlug)}`, {
+      headers: {
+        ...HEADERS,
+        'Accept': 'application/json',
+        'Referer': `https://cinverse.com.ng/match/${matchSlug}`,
+        'Cookie': session.cookies,
+      },
+      timeout: 15000,
+    });
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+
+    return {
+      success: true,
+      match: data.match || null,
+      sources: data.sources || [],
+      streamToken: data.streamToken || null,
+      streamPath: data.streamPath || null,
+      embedUrl: data.embedUrl || null,
+      directStreamUrl: data.directStreamUrl || null,
+      provider: data.provider || 'cinverse',
+      channelKey: data.channelKey || null,
+    };
+
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
 // ─── Test a single stream ───────────────────────────────────────────────────
+
 async function testStream(url) {
   const now = Date.now();
   if (streamCache[url] && now - streamCache[url].testedAt < STREAM_CACHE_TTL) {
@@ -201,6 +218,7 @@ async function testStream(url) {
 
   const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
   const start = Date.now();
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -221,32 +239,95 @@ async function testStream(url) {
   }
 }
 
-// ─── Routes ─────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /api/sports/matches?sport=football
+// ─── GET /api/sports/matches ────────────────────────────────────────────────
+// Query: ?sport=football&date=YYYY-MM-DD
 router.get('/matches', async (req, res) => {
   try {
     const sport = req.query.sport || 'football';
-    const matches = await fetchMatches(sport);
-    const live     = matches.filter(m => m.status === 'LIVE');
+    const date = req.query.date || null;
+
+    const result = await fetchMatches(sport, date);
+    const matches = result.matches || [];
+    const live = matches.filter(m => m.status === 'LIVE');
     const upcoming = matches.filter(m => m.status === 'UPCOMING');
-    const other    = matches.filter(m => !['LIVE', 'UPCOMING'].includes(m.status));
+    const finished = matches.filter(m => m.status === 'FINISHED');
 
     res.json({
       success: true,
-      sport,
+      sport: result.sport || sport,
+      date: result.date,
+      source: result.source || 'cinverse',
       count: matches.length,
       live: live.length,
-      matches: [...live, ...upcoming, ...other],
+      upcoming: upcoming.length,
+      finished: finished.length,
+      matches: [...live, ...upcoming, ...finished],
+      cached: !!cache[`${sport}:${date || 'today'}`] && (Date.now() - cache[`${sport}:${date || 'today'}`].lastFetch < CACHE_TTL),
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// POST /api/sports/test-streams
+// ─── GET /api/sports/match/:id ──────────────────────────────────────────────
+// Get detailed match info including stream tokens
+router.get('/match/:id', async (req, res) => {
+  try {
+    const matchSlug = req.params.id;
+    const detail = await fetchMatchDetail(matchSlug);
+
+    if (!detail.success) {
+      return res.status(404).json({ success: false, error: detail.error || 'Match not found' });
+    }
+
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /api/sports/stream ─────────────────────────────────────────────────
+// Query: ?source=cinverse&id=<match_id_or_slug>
+router.get('/stream', async (req, res) => {
+  const { source, id } = req.query;
+
+  if (!source || !id) {
+    return res.status(400).json({ success: false, error: 'source and id are required' });
+  }
+
+  try {
+    const result = await extractStream(source, id, {
+      streamIndex: req.query.stream_index || 0,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /api/sports/streams ────────────────────────────────────────────────
+// Query: ?source=cinverse&id=<match_id> — Returns available streams
+router.get('/streams', async (req, res) => {
+  const { source, id } = req.query;
+
+  if (!source || !id) {
+    return res.status(400).json({ success: false, error: 'source and id are required' });
+  }
+
+  try {
+    const result = await extractStream(source, id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /api/sports/test-streams ──────────────────────────────────────────
 // Body: { streams: [{ name, url }] }
-// Returns streams sorted by speed, fastest first
 router.post('/test-streams', async (req, res) => {
   try {
     const { streams = [] } = req.body;
@@ -259,7 +340,6 @@ router.post('/test-streams', async (req, res) => {
       })
     );
 
-    // Sort: working streams first, then by speed
     results.sort((a, b) => {
       if (a.ok && !b.ok) return -1;
       if (!a.ok && b.ok) return 1;
@@ -272,23 +352,38 @@ router.post('/test-streams', async (req, res) => {
   }
 });
 
-// GET /api/sports/stream-proxy?url=<m3u8_url>
+// ─── GET /api/sports/stream-proxy ───────────────────────────────────────────
+// Proxy m3u8 streams with proper headers
 router.get('/stream-proxy', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
 
   try {
     const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
-    const streamResp = await fetch(url, { headers: STREAM_HEADERS });
+    const rangeHeader = req.headers['range'];
+    const fetchHeaders = { ...STREAM_HEADERS };
+    if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
 
-    if (!streamResp.ok) return res.status(streamResp.status).send('Stream error');
+    const streamResp = await fetch(url, { headers: fetchHeaders });
+
+    if (!streamResp.ok && streamResp.status !== 206) {
+      return res.status(streamResp.status).send('Stream error');
+    }
 
     const contentType = streamResp.headers.get('content-type') || 'application/vnd.apple.mpegurl';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Accept-Ranges', 'bytes');
 
-    if (url.includes('.m3u8')) {
+    if (streamResp.headers.get('content-length')) {
+      res.setHeader('Content-Length', streamResp.headers.get('content-length'));
+    }
+    if (streamResp.headers.get('content-range')) {
+      res.setHeader('Content-Range', streamResp.headers.get('content-range'));
+    }
+
+    if (url.includes('.m3u8') && !rangeHeader) {
       const text = await streamResp.text();
       const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
       const host = `${req.protocol}://${req.get('host')}`;

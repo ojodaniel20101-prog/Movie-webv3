@@ -1,10 +1,24 @@
-const express = require('express');
-const router  = express.Router();
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * EMBEDHD ROUTE — Streaming Source (Currently Unavailable)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Source: embedhd.org / exposestrat.com
+ * Status: DOWN — SSL certificate issues since mid-2025
+ *
+ * This module is kept for when the service comes back online.
+ * All endpoints return graceful error messages.
+ *
+ * Working alternative: Use /api/sports (Cineverse source)
+ */
 
-const API_URL    = 'https://embedhd.org/api-event.php';
+const express = require('express');
+const router = express.Router();
+
+const API_URL = 'https://embedhd.org/api-event.php';
 const FETCH_BASE = 'https://embedhd.org/source/fetch.php';
-const MAESTRO    = 'https://exposestrat.com/maestrohd1.php';
-const REFERER    = 'https://exposestrat.com/';
+const MAESTRO_URL = 'https://exposestrat.com/maestrohd1.php';
+const REFERER = 'https://exposestrat.com/';
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -12,158 +26,168 @@ const HEADERS = {
   'Accept-Language': 'en-US,en;q=0.9',
 };
 
-// Cache
-let matchCache = { data: null, lastFetch: 0 };
-const CACHE_TTL = 60 * 1000;
+// ─── Health Check ───────────────────────────────────────────────────────────
 
-async function getFetch() {
-  return (await import('node-fetch')).default;
-}
-
-async function getText(url, referer = 'https://embedhd.org/') {
-  const fetch = await getFetch();
-  const resp = await fetch(url, {
-    headers: { ...HEADERS, Referer: referer },
-    timeout: 15000,
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.text();
-}
-
-async function getJson(url, referer = 'https://embedhd.org/') {
-  const text = await getText(url, referer);
-  return JSON.parse(text);
-}
-
-// ─── Fetch matches ────────────────────────────────────────────────
-async function fetchMatches() {
-  const now = Date.now();
-  if (matchCache.data && now - matchCache.lastFetch < CACHE_TTL) {
-    return matchCache.data;
+async function isServiceAvailable() {
+  try {
+    const fetch = await import('node-fetch').then(m => m.default);
+    const resp = await fetch(API_URL, {
+      headers: { ...HEADERS, Referer: 'https://embedhd.org/' },
+      timeout: 5000,
+    });
+    return resp.ok;
+  } catch {
+    return false;
   }
-
-  const data = await getJson(API_URL);
-  if (!data || !data.days) return [];
-
-  const matches = [];
-  for (const day of data.days) {
-    for (const item of (day.items || [])) {
-      matches.push({
-        id:       item.id,
-        title:    item.title || 'Unknown',
-        home:     item.home_team || '',
-        away:     item.away_team || '',
-        homeLogo: item.home_logo || '',
-        awayLogo: item.away_logo || '',
-        league:   (item.league || '').toUpperCase(),
-        category: item.category || '',
-        status:   item.status || 'UNKNOWN',
-        time:     item.ts_et ? new Date(item.ts_et * 1000).toISOString() : null,
-        streams:  item.streams || [],
-        source:   'embedhd',
-      });
-    }
-  }
-
-  // Sort: LIVE first, then UPCOMING
-  matches.sort((a, b) => {
-    const order = { LIVE: 0, UPCOMING: 1 };
-    const ao = order[a.status] ?? 2;
-    const bo = order[b.status] ?? 2;
-    return ao - bo;
-  });
-
-  matchCache = { data: matches, lastFetch: now };
-  return matches;
 }
 
-// ─── Extract fid from fetch.php ───────────────────────────────────
-async function extractFid(hdId) {
-  const text = await getText(`${FETCH_BASE}?hd=${hdId}`);
-  const m = text.match(/fid\s*=\s*"([^"]+)"/);
-  return m ? m[1] : null;
-}
-
-// ─── Extract m3u8 from maestrohd1.php ────────────────────────────
-async function extractM3u8(fid) {
-  const text = await getText(`${MAESTRO}?player=desktop&live=${fid}`, 'https://embedhd.org/');
-
-  // Method 1: char array join pattern (obfuscated URL)
-  const arrays = [...text.matchAll(/\[("(?:[^"]*)"(?:,"(?:[^"]*)")*)\]\.join\(""\)/g)];
-  for (const arr of arrays) {
-    const chars = [...arr[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
-    const url = chars.join('').replace(/\\\//g, '/');
-    if (url.includes('.m3u8') && url.startsWith('http')) return url;
-  }
-
-  // Method 2: direct m3u8 URL
-  const direct = text.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/);
-  if (direct) return direct[1];
-
-  return null;
-}
-
-// ─── Routes ───────────────────────────────────────────────────────
+// ─── Routes ─────────────────────────────────────────────────────────────────
 
 // GET /api/embedhd/matches
 router.get('/matches', async (req, res) => {
+  const available = await isServiceAvailable();
+  if (!available) {
+    return res.status(503).json({
+      success: false,
+      error: 'EmbedHD service is currently unavailable (SSL/connection error)',
+      alternative: 'Use /api/sports/matches for live match data from Cineverse',
+      status: 'service_down',
+    });
+  }
+
+  // If service comes back, attempt to fetch
   try {
-    const matches = await fetchMatches();
-    const live     = matches.filter(m => m.status === 'LIVE');
-    const upcoming = matches.filter(m => m.status === 'UPCOMING');
-    const other    = matches.filter(m => !['LIVE','UPCOMING'].includes(m.status));
-    res.json({ success: true, count: matches.length, live: live.length, matches: [...live, ...upcoming, ...other] });
+    const fetch = await import('node-fetch').then(m => m.default);
+    const data = await fetch(API_URL, {
+      headers: { ...HEADERS, Referer: 'https://embedhd.org/' },
+      timeout: 15000,
+    }).then(r => r.json());
+
+    if (!data || !data.days) {
+      return res.json({ success: true, count: 0, matches: [] });
+    }
+
+    const matches = [];
+    for (const day of data.days) {
+      for (const item of (day.items || [])) {
+        matches.push({
+          id: item.id,
+          title: item.title || 'Unknown',
+          home: item.home_team || '',
+          away: item.away_team || '',
+          homeLogo: item.home_logo || '',
+          awayLogo: item.away_logo || '',
+          league: (item.league || '').toUpperCase(),
+          category: item.category || '',
+          status: item.status || 'UNKNOWN',
+          time: item.ts_et ? new Date(item.ts_et * 1000).toISOString() : null,
+          streams: item.streams || [],
+          source: 'embedhd',
+        });
+      }
+    }
+
+    matches.sort((a, b) => {
+      const order = { LIVE: 0, UPCOMING: 1 };
+      return (order[a.status] ?? 2) - (order[b.status] ?? 2);
+    });
+
+    res.json({ success: true, count: matches.length, matches });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(503).json({
+      success: false,
+      error: `EmbedHD fetch failed: ${err.message}`,
+      alternative: 'Use /api/sports/matches for live match data from Cineverse',
+    });
   }
 });
 
 // GET /api/embedhd/stream?id=<match_id>&stream_index=0
 router.get('/stream', async (req, res) => {
+  const available = await isServiceAvailable();
+  if (!available) {
+    return res.status(503).json({
+      success: false,
+      error: 'EmbedHD service is currently unavailable',
+      alternative: 'Use /api/sports/stream?source=cinverse&id=<match_id>',
+    });
+  }
+
   const { id, stream_index = 0 } = req.query;
   if (!id) return res.status(400).json({ error: 'id required' });
 
   try {
-    const matches = await fetchMatches();
-    const match = matches.find(m => String(m.id) === String(id));
+    const fetch = await import('node-fetch').then(m => m.default);
+
+    // Fetch matches to find the one requested
+    const data = await fetch(API_URL, {
+      headers: { ...HEADERS, Referer: 'https://embedhd.org/' },
+      timeout: 15000,
+    }).then(r => r.json());
+
+    let match = null;
+    for (const day of data.days) {
+      for (const item of (day.items || [])) {
+        if (String(item.id) === String(id)) {
+          match = item;
+          break;
+        }
+      }
+      if (match) break;
+    }
+
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
-    const streams = match.streams;
-    if (!streams.length) return res.json({ success: false, error: 'No streams available' });
+    const streams = match.streams || [];
+    if (!streams.length) return res.json({ success: false, error: 'No streams' });
 
     const stream = streams[Math.min(parseInt(stream_index), streams.length - 1)];
-    const hdId   = stream.hd;
+    const hdId = stream.hd;
 
-    // Step 1: Get fid
-    const fid = await extractFid(hdId);
+    // Extract fid
+    const fetchText = await fetch(`${FETCH_BASE}?hd=${hdId}`, {
+      headers: { ...HEADERS, Referer: 'https://embedhd.org/' },
+    }).then(r => r.text());
+
+    const fidMatch = fetchText.match(/fid\s*=\s*"([^"]+)"/);
+    const fid = fidMatch ? fidMatch[1] : null;
+
     if (!fid) return res.json({ success: false, error: 'Could not extract fid' });
 
-    // Step 2: Get m3u8
-    const m3u8 = await extractM3u8(fid);
-    if (!m3u8) return res.json({ success: false, error: 'Could not extract m3u8' });
+    // Extract m3u8
+    const maestroText = await fetch(`${MAESTRO_URL}?player=desktop&live=${fid}`, {
+      headers: { ...HEADERS, Referer: 'https://embedhd.org/' },
+    }).then(r => r.text());
 
-    const host = `${req.protocol}://${req.get('host')}`;
-    res.json({
-      success:     true,
-      m3u8,
-      fid,
-      hdId,
-      referer:     REFERER,
-      streamUrl:   `${host}/api/embedhd/proxy?url=${encodeURIComponent(m3u8)}`,
-      streamCount: streams.length,
-    });
+    // Method 1: char array join
+    const arrays = [...maestroText.matchAll(/\[("(?:[^"]*)"(?:,"(?:[^"]*)")*)\]\.join\(\"\"\)/g)];
+    for (const arr of arrays) {
+      const chars = [...arr[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
+      const url = chars.join('').replace(/\\\//g, '/');
+      if (url.includes('.m3u8') && url.startsWith('http')) {
+        return res.json({ success: true, m3u8: url, fid, hdId, referer: REFERER });
+      }
+    }
+
+    // Method 2: direct m3u8 URL
+    const direct = maestroText.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/);
+    if (direct) {
+      return res.json({ success: true, m3u8: direct[1], fid, hdId, referer: REFERER });
+    }
+
+    res.json({ success: false, error: 'Could not extract m3u8' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// GET /api/embedhd/proxy?url=<m3u8_url> — stream proxy with correct Referer
+// GET /api/embedhd/proxy?url=<m3u8_url>
 router.get('/proxy', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
 
   try {
-    const fetch = await getFetch();
+    const fetch = await import('node-fetch').then(m => m.default);
     const rangeHeader = req.headers['range'];
     const fetchHeaders = { ...HEADERS, Referer: REFERER };
     if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
@@ -177,12 +201,12 @@ router.get('/proxy', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Accept-Ranges', 'bytes');
     if (upstream.headers.get('content-length')) res.setHeader('Content-Length', upstream.headers.get('content-length'));
-    if (upstream.headers.get('content-range'))  res.setHeader('Content-Range', upstream.headers.get('content-range'));
+    if (upstream.headers.get('content-range')) res.setHeader('Content-Range', upstream.headers.get('content-range'));
 
     if (url.includes('.m3u8')) {
-      const text  = await upstream.text();
-      const base  = url.substring(0, url.lastIndexOf('/') + 1);
-      const host  = `${req.protocol}://${req.get('host')}`;
+      const text = await upstream.text();
+      const base = url.substring(0, url.lastIndexOf('/') + 1);
+      const host = `${req.protocol}://${req.get('host')}`;
       const rewritten = text.split('\n').map(line => {
         const t = line.trim();
         if (!t || t.startsWith('#')) return line;

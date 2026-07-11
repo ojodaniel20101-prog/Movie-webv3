@@ -1,9 +1,17 @@
+/**
+ * Sports Live Route — Python Scraper Proxy
+ * Wraps sports_grabber_v3.py and returns JSON with match data & stream URLs.
+ */
+
 const express = require('express');
 const { spawn } = require('child_process');
+const path = require('path');
 const router = express.Router();
 
+// GET /api/sports/live/live
 router.get('/live', (req, res) => {
-  const python = spawn('python3', ['./routes/sports_grabber_v3.py']);
+  const scriptPath = path.join(__dirname, 'sports_grabber_v3.py');
+  const python = spawn('python3', [scriptPath, '--json']);
   let output = '';
   let error = '';
 
@@ -16,22 +24,52 @@ router.get('/live', (req, res) => {
   });
 
   python.on('close', (code) => {
-    if (code !== 0) {
-      return res.status(500).json({ error: error || 'Script failed' });
+    if (code !== 0 && !output) {
+      return res.status(500).json({
+        success: false,
+        error: error || 'Python scraper failed',
+        note: 'Ensure Python 3 and requests library are installed',
+      });
     }
-    // Parse output and extract Channel 1 stream (Primary HD)
-    const streamMatch = output.match(/https:\/\/live-pull\.aisports\.mobi\/moviebox\/[^\s]+/);
-    const channelMatch = output.match(/https:\/\/www\.rtmpcdn\.com\/live\/migu1\.m3u8/);
-    
-    const primaryStream = streamMatch ? streamMatch[0] : null;
-    const channel1Stream = channelMatch ? channelMatch[0] : null;
 
-    res.json({
-      success: true,
-      primaryStream: primaryStream,
-      channel1Stream: channel1Stream,
-      rawOutput: output
-    });
+    try {
+      // Try to parse JSON output
+      const lines = output.trim().split('\n');
+      let jsonData = null;
+
+      // Find the last JSON line
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (line.startsWith('{')) {
+          try {
+            jsonData = JSON.parse(line);
+            break;
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      if (jsonData) {
+        return res.json({
+          success: true,
+          ...jsonData,
+        });
+      }
+
+      // Fallback: return raw output
+      res.json({
+        success: true,
+        rawOutput: output,
+        note: 'Python scraper ran but returned non-JSON output',
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err.message,
+        rawOutput: output,
+      });
+    }
   });
 });
 
