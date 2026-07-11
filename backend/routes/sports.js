@@ -8,6 +8,11 @@
  *   - GET /api/football/match/<id> — Match details & stream tokens
  *   - GET /api/sports/streams?source=cinverse&id=<id> — Stream extraction
  *
+ * Stream Provider: embed.st (JW Player-based embeds)
+ *   Cineverse uses embed.st as their streaming backend. Each match has
+ *   embed URLs like: https://embed.st/embed/<source>/<id>/<streamNo>
+ *   Sources include: admin (Premium HD), echo, golf
+ *
  * Endpoints provided:
  *   GET  /api/sports/matches?sport=football&date=YYYY-MM-DD
  *   GET  /api/sports/match/:id
@@ -123,27 +128,41 @@ async function fetchMatches(sport = 'football', date = null) {
     const rawMatches = data.matches || [];
 
     // Normalize to unified format
+    // Cineverse stream source: embed.st (JW Player embeds)
     const CV_BASE = 'https://cinverse.com.ng';
-    const matches = rawMatches.map(m => ({
-      id: m.id || '',
-      slug: m.slug || m.id || '',
-      sport_type: m.sportType || sport,
-      homeTeam: m.homeTeam || 'Unknown',
-      awayTeam: m.awayTeam || 'Unknown',
-      homeScore: m.homeScore ?? '-',
-      awayScore: m.awayScore ?? '-',
-      status: STATUS_MAP[m.status] || m.status || 'UPCOMING',
-      rawStatus: m.status || 'unknown',
-      minute: m.minute || null,
-      league: m.league || '',
-      startTime: m.startTime || null,
-      source: m.source || 'cinverse',
-      homeTeamLogo: m.homeTeamLogo ? `/api/sports/logo-proxy?url=${encodeURIComponent(m.homeTeamLogo.startsWith('http') ? m.homeTeamLogo : `${CV_BASE}${m.homeTeamLogo}`)}` : '',
-      awayTeamLogo: m.awayTeamLogo ? `/api/sports/logo-proxy?url=${encodeURIComponent(m.awayTeamLogo.startsWith('http') ? m.awayTeamLogo : `${CV_BASE}${m.awayTeamLogo}`)}` : '',
-      channelCount: m.channelCount || 0,
-      channels: m.channels || [],
-      scrapedAt: new Date().toISOString(),
-    }));
+    const EMBED_BASE = 'https://embed.st';
+    const matches = rawMatches.map(m => {
+      // Build embed.st stream URLs from channels if available
+      const streamSources = (m.channels || []).map((ch, idx) => ({
+        source: 'cinverse',
+        label: ch.title || `Stream ${idx + 1}`,
+        embedUrl: ch.embedUrl || `${EMBED_BASE}/embed/${m.sourceType || 'admin'}/${m.id}/${idx + 1}`,
+        key: ch.key || String(idx),
+      }));
+
+      return {
+        id: m.id || '',
+        slug: m.slug || m.id || '',
+        sport_type: m.sportType || sport,
+        homeTeam: m.homeTeam || 'Unknown',
+        awayTeam: m.awayTeam || 'Unknown',
+        homeScore: m.homeScore ?? '-',
+        awayScore: m.awayScore ?? '-',
+        status: STATUS_MAP[m.status] || m.status || 'UPCOMING',
+        rawStatus: m.status || 'unknown',
+        minute: m.minute || null,
+        league: m.league || '',
+        startTime: m.startTime || null,
+        source: m.source || 'cinverse',
+        streamProvider: 'embed.st',
+        homeTeamLogo: m.homeTeamLogo ? `/api/sports/logo-proxy?url=${encodeURIComponent(m.homeTeamLogo.startsWith('http') ? m.homeTeamLogo : `${CV_BASE}${m.homeTeamLogo}`)}` : '',
+        awayTeamLogo: m.awayTeamLogo ? `/api/sports/logo-proxy?url=${encodeURIComponent(m.awayTeamLogo.startsWith('http') ? m.awayTeamLogo : `${CV_BASE}${m.awayTeamLogo}`)}` : '',
+        channelCount: m.channelCount || 0,
+        channels: m.channels || [],
+        streamSources,
+        scrapedAt: new Date().toISOString(),
+      };
+    });
 
     // Sort: LIVE first, then UPCOMING, then FINISHED
     const statusOrder = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
@@ -154,6 +173,7 @@ async function fetchMatches(sport = 'football', date = null) {
       sport,
       date,
       source: 'cinverse',
+      streamProvider: 'embed.st',
       total: matches.length,
     };
 
@@ -262,6 +282,7 @@ router.get('/matches', async (req, res) => {
       sport: result.sport || sport,
       date: result.date,
       source: result.source || 'cinverse',
+      streamProvider: result.streamProvider || 'embed.st',
       count: matches.length,
       live: live.length,
       upcoming: upcoming.length,
