@@ -439,11 +439,11 @@ function MatchDetailPanel({ match, onClose, onPlay }: {
           )}
 
           {/* Highlights */}
-          {match.highlights.length > 0 && (
+          {(match.highlights ?? []).length > 0 && (
             <div className="px-5 pb-4">
               <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
-                  <Film size={12} /> Highlights ({match.highlights.length})
+                  <Film size={12} /> Highlights ({(match.highlights ?? []).length})
                 </h4>
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
                   {match.highlights.map((h, i) => (
@@ -489,11 +489,11 @@ function MatchDetailPanel({ match, onClose, onPlay }: {
           )}
 
           {/* Full Match Replays */}
-          {match.replays.length > 0 && (
+          {(match.replays ?? []).length > 0 && (
             <div className="px-5 pb-6">
               <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
-                  <Video size={12} /> Full Match Replays ({match.replays.length})
+                  <Video size={12} /> Full Match Replays ({(match.replays ?? []).length})
                 </h4>
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
                   {match.replays.map((r, i) => (
@@ -643,8 +643,8 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
   index: number;
 }) {
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || match.playPath);
-  const hasHighlights = match.highlights.length > 0;
-  const hasReplays = match.replays.length > 0;
+  const hasHighlights = (match.highlights ?? []).length > 0;
+  const hasReplays = (match.replays ?? []).length > 0;
 
   return (
     <motion.div
@@ -708,12 +708,12 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
       <div className="mt-3 flex items-center justify-center gap-2">
         {hasHighlights && (
           <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,212,255,0.1)', color: '#22D3EE' }}>
-            <Film size={9} /> {match.highlights.length} Highlights
+            <Film size={9} /> {(match.highlights ?? []).length} Highlights
           </span>
         )}
         {hasReplays && (
           <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.1)', color: '#8B5CF6' }}>
-            <Video size={9} /> {match.replays.length} Replays
+            <Video size={9} /> {(match.replays ?? []).length} Replays
           </span>
         )}
       </div>
@@ -1332,13 +1332,14 @@ export default function SportsPage() {
   }, []);
 
   const handleViewDetails = useCallback((match: Match) => {
-    // If not already loaded with full details, fetch them
-    if (match.replays.length === 0 && match.highlights.length === 0 && match.status === 'FINISHED') {
+    // Always fetch full match details for finished matches to ensure replays/highlights are loaded
+    if (match.status === 'FINISHED') {
       fetch(`${API_BASE}/api/sports-v2/match/${match.id}`)
         .then(r => r.json())
         .then(data => {
           if (data.success && data.match) {
-            setDetailMatch(data.match);
+            // Merge fetched data with existing match to preserve any fields not returned by detail endpoint
+            setDetailMatch({ ...match, ...data.match });
           } else {
             setDetailMatch(match);
           }

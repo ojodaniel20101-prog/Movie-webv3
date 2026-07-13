@@ -6,7 +6,8 @@ import {
   TrendingUp, Calendar, Shield, Swords, Target,
   Activity, X, Maximize, Minimize,
   Star, AlertCircle, ChevronDown, BarChart3,
-  Users, Timer, Flag, Smartphone, Monitor, AlertTriangle
+  Users, Timer, Flag, Smartphone, Monitor, AlertTriangle,
+  Video, Film, ChevronRight
 } from 'lucide-react';
 import Hls from 'hls.js';
 import MatchStatsOverlay from '../components/football/MatchStatsOverlay';
@@ -19,6 +20,23 @@ interface Stream {
   quality: string;
   ok?: boolean;
   ms?: number;
+}
+
+interface Replay {
+  id: string;
+  title: string;
+  url: string;
+  cover: string;
+  duration: string;
+}
+
+interface Highlight {
+  id: string;
+  title: string;
+  url: string;
+  cover: string;
+  duration: string;
+  views: string;
 }
 
 interface EmbedhdStream {
@@ -70,6 +88,9 @@ interface Match {
   stats?: MatchStats;
   venue?: string;
   referee?: string;
+  sportType?: string;
+  replays: Replay[];
+  highlights: Highlight[];
 }
 
 const SPORTS = [
@@ -102,6 +123,25 @@ function formatMatchTime(timestamp: number | null): string {
 
   const weekday = date.toLocaleDateString([], { weekday: 'long' });
   return `${weekday} ${timeStr}`;
+}
+
+// ─── Utility: Format Duration ────────────────────────────────────────────────
+function formatDuration(seconds: string): string {
+  const s = parseInt(seconds, 10);
+  if (isNaN(s) || s === 0) return '';
+  const mins = Math.floor(s / 60);
+  const hrs = Math.floor(mins / 60);
+  if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+  return `${mins}m`;
+}
+
+// ─── Utility: Format Views ───────────────────────────────────────────────────
+function formatViews(views: string): string {
+  const v = parseInt(views, 10);
+  if (isNaN(v)) return '';
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return String(v);
 }
 
 // ─── Utility: Skeleton Shimmer ───────────────────────────────────────────────
@@ -282,6 +322,89 @@ function MatchEventTimeline({ events }: { events?: MatchEvent[] }) {
   );
 }
 
+// ─── Component: VideoModal ───────────────────────────────────────────────────
+function VideoModal({ title, url, onClose }: { title: string; url: string; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!videoRef.current || !url) return;
+    const video = videoRef.current;
+
+    if (Hls.isSupported() && url.includes('.m3u8')) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false);
+        video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.ERROR, () => {
+        setError('Failed to load video');
+        setLoading(false);
+      });
+      return () => { hls.destroy(); };
+    } else {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => {
+        setLoading(false);
+        video.play().catch(() => {});
+      });
+      video.addEventListener('error', () => {
+        setError('Failed to load video');
+        setLoading(false);
+      });
+    }
+  }, [url]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="w-full max-w-3xl rounded-2xl overflow-hidden"
+        style={{ background: '#0a0e27', border: '1px solid rgba(255,255,255,0.1)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <h3 className="text-sm font-bold text-white truncate pr-4">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
+            <X size={16} style={{ color: '#8899AA' }} />
+          </button>
+        </div>
+        <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000' }}>
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center z-10">
+              <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#22D3EE' }} />
+            </div>
+          )}
+          {error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+              <WifiOff className="w-8 h-8 mb-2" style={{ color: '#ef4444' }} />
+              <p className="text-xs" style={{ color: '#8899AA' }}>{error}</p>
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            className="w-full h-full"
+            controls
+            playsInline
+            style={{ opacity: loading ? 0 : 1 }}
+          />
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ─── Component: MatchDetailPanel ─────────────────────────────────────────────
 function MatchDetailPanel({ match, onClose, onPlay, source }: {
   match: Match;
@@ -289,10 +412,22 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
   onPlay: (match: Match) => void;
   source: 'local' | 'english';
 }) {
+  const [videoModal, setVideoModal] = useState<{ title: string; url: string } | null>(null);
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
 
   return (
-    <motion.div
+    <>
+      <AnimatePresence>
+        {videoModal && (
+          <VideoModal
+            title={videoModal.title}
+            url={videoModal.url}
+            onClose={() => setVideoModal(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -427,6 +562,96 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
           </div>
         )}
 
+        {/* Highlights */}
+        {(match.highlights ?? []).length > 0 && (
+          <div className="px-5 pb-4">
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+                <Film size={12} /> Highlights ({(match.highlights ?? []).length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                {(match.highlights ?? []).map((h, i) => (
+                  <motion.button
+                    key={h.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => setVideoModal({ title: h.title, url: h.url })}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
+                  >
+                    {h.cover ? (
+                      <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={h.cover} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
+                          <Play size={14} className="text-white fill-current" />
+                        </div>
+                        {h.duration !== '0' && (
+                          <span className="absolute bottom-0.5 right-0.5 text-[9px] font-bold px-1 rounded" style={{ background: 'rgba(0,0,0,0.7)', color: '#fff' }}>
+                            {formatDuration(h.duration)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <Film size={16} style={{ color: '#8899AA' }} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{h.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {h.views !== '0' && (
+                          <span className="text-[10px]" style={{ color: '#8899AA' }}>{formatViews(h.views)} views</span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Match Replays */}
+        {(match.replays ?? []).length > 0 && (
+          <div className="px-5 pb-6">
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+                <Video size={12} /> Full Match Replays ({(match.replays ?? []).length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                {(match.replays ?? []).map((r, i) => (
+                  <motion.button
+                    key={r.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => setVideoModal({ title: r.title, url: r.url })}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
+                  >
+                    {r.cover ? (
+                      <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={r.cover} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
+                          <Play size={14} className="text-white fill-current" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <Video size={16} style={{ color: '#8899AA' }} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{r.title}</p>
+                    </div>
+                    <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Football Stats Overlay */}
         <div className="px-5 pb-6">
           <MatchStatsOverlay
@@ -438,6 +663,7 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
         </div>
       </motion.div>
     </motion.div>
+    </>
   );
 }
 
@@ -551,6 +777,8 @@ function MatchCard({ match, onPlay, onViewDetails, source, index }: {
   index: number;
 }) {
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
+  const hasHighlights = (match.highlights ?? []).length > 0;
+  const hasReplays = (match.replays ?? []).length > 0;
 
   return (
     <motion.div
@@ -635,6 +863,20 @@ function MatchCard({ match, onPlay, onViewDetails, source, index }: {
           </div>
         </div>
       )}
+
+      {/* Replay/Highlight Badges */}
+      <div className="mt-3 flex items-center justify-center gap-2">
+        {hasHighlights && (
+          <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,212,255,0.1)', color: '#22D3EE' }}>
+            <Film size={9} /> {(match.highlights ?? []).length} Highlights
+          </span>
+        )}
+        {hasReplays && (
+          <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.1)', color: '#8B5CF6' }}>
+            <Video size={9} /> {(match.replays ?? []).length} Replays
+          </span>
+        )}
+      </div>
 
       {/* Watch Button */}
       {canPlay && (
@@ -1476,6 +1718,22 @@ export default function SportsPage() {
           referee: m.referee || undefined,
           stats: m.stats || undefined,
           events: m.events || undefined,
+          sportType: m.sport_type || m.sportType || 'football',
+          replays: (m.replays || []).map((r: any, idx: number) => ({
+            id: r.id || String(idx),
+            title: r.title || `Replay ${idx + 1}`,
+            url: r.url || r.path || '',
+            cover: r.cover || r.coverUrl || '',
+            duration: r.duration || '0',
+          })),
+          highlights: (m.highlights || []).map((h: any, idx: number) => ({
+            id: h.id || String(idx),
+            title: h.title || `Highlight ${idx + 1}`,
+            url: h.url || h.path || '',
+            cover: h.cover || h.coverUrl || '',
+            duration: h.duration || '0',
+            views: h.views || h.viewCount || '0',
+          })),
         }));
         setMatches(normalized);
       }
@@ -1501,13 +1759,56 @@ export default function SportsPage() {
   }, [source]);
 
   const handleViewDetails = useCallback((match: Match) => {
-    setDetailMatch(match);
+    // For finished matches, always fetch full details to ensure replays/highlights are loaded
+    if (match.status === 'FINISHED') {
+      fetch(`${API_BASE}/api/sports/match/${match.id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.match) {
+            const m = data.match;
+            const enriched: Match = {
+              ...match,
+              replays: (m.replays || []).map((r: any, idx: number) => ({
+                id: r.id || String(idx),
+                title: r.title || `Replay ${idx + 1}`,
+                url: r.url || r.path || '',
+                cover: r.cover || r.coverUrl || '',
+                duration: r.duration || '0',
+              })),
+              highlights: (m.highlights || []).map((h: any, idx: number) => ({
+                id: h.id || String(idx),
+                title: h.title || `Highlight ${idx + 1}`,
+                url: h.url || h.path || '',
+                cover: h.cover || h.coverUrl || '',
+                duration: h.duration || '0',
+                views: h.views || h.viewCount || '0',
+              })),
+            };
+            setDetailMatch(enriched);
+          } else {
+            setDetailMatch(match);
+          }
+        })
+        .catch(() => setDetailMatch(match));
+    } else {
+      setDetailMatch(match);
+    }
   }, []);
 
-  // Filter matches by selected league
+  // Filter matches by selected league, sort football first
   const filteredMatches = useMemo(() => {
-    if (!selectedLeague) return matches;
-    return matches.filter(m => m.league === selectedLeague);
+    let filtered = matches;
+    if (selectedLeague) {
+      filtered = matches.filter(m => m.league === selectedLeague);
+    }
+    // Sort: football/soccer matches first within each status group
+    const statusOrder: Record<string, number> = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
+    const isFootball = (m: Match) => m.sportType === 'football' || m.sportType === 'soccer' ? 0 : 1;
+    return [...filtered].sort((a, b) => {
+      const statusDiff = (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+      if (statusDiff !== 0) return statusDiff;
+      return isFootball(a) - isFootball(b);
+    });
   }, [matches, selectedLeague]);
 
   // Get unique leagues

@@ -176,9 +176,15 @@ async function fetchMatches(leagueId = '0') {
     const rawMatches = data.list || [];
     const matches = rawMatches.map(normalizeMatch);
 
-    // Sort: LIVE first, then UPCOMING, then FINISHED
+    // Sort: LIVE first, then HALF_TIME, then UPCOMING, then FINISHED
+    // Within each status group, football/soccer matches come first
     const statusOrder = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
-    matches.sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4));
+    const isFootball = (m) => m.sportType === 'football' || m.sportType === 'soccer' ? 0 : 1;
+    matches.sort((a, b) => {
+      const statusDiff = (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+      if (statusDiff !== 0) return statusDiff;
+      return isFootball(a) - isFootball(b);
+    });
 
     const result = {
       matches,
