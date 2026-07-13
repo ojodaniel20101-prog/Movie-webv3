@@ -13,6 +13,7 @@ const animePythonRoutesV2 = require('./routes/animeheaven-python-v2');
 const animePythonRoutes = require('./routes/animeheaven-python');
 const sportsLiveRoutes = require('./routes/sports-live');
 const sportsRoutes   = require('./routes/sports');
+const sportsAoneroomRoutes = require('./routes/sports-aoneroom');
 const footballStatsRoutes = require('./routes/football-stats');
 const embedhdRoutes  = require('./routes/embedhd');
 const movieboxRoutes = require('./routes/moviebox');
@@ -70,6 +71,7 @@ app.use('/api/anime/python', animePythonRoutesV2);
 app.use('/api/anime/python-old', animePythonRoutes);
 app.use('/api/sports/live', sportsLiveRoutes);
 app.use('/api/sports', sportsRoutes);
+app.use('/api/sports-v2', sportsAoneroomRoutes);
 app.use('/api/football', footballStatsRoutes);
 app.use('/api/embedhd', embedhdRoutes);
 app.use('/api/moviebox', movieboxRoutes);
@@ -156,3 +158,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+
