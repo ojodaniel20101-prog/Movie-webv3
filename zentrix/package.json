@@ -1,0 +1,27 @@
+{
+  "name": "zentrix-streaming",
+  "version": "1.0.0",
+  "description": "Next-generation premium streaming platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -n SERVER,CLIENT -c bgMagenta.bold,bgCyan.bold \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "cd frontend && npm run dev",
+    "dev:server": "cd backend && node index.js",
+    "install:all": "npm install && (cd backend && npm install) && (cd frontend && npm install)",
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd backend && node index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^3.3.2",
+    "uuid": "^9.0.1"
+  }
+}

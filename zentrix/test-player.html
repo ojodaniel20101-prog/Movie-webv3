@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Live TV Stream Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.16"></script>
+  <style>
+    body { background: #0a0a16; color: #fff; font-family: system-ui; padding: 20px; }
+    .channel { margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    video { width: 320px; height: 180px; background: #000; border-radius: 8px; }
+    .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 12px; margin-left: 10px; }
+    .status.loading { background: #f59e0b; color: #000; }
+    .status.playing { background: #10b981; }
+    .status.error { background: #ef4444; }
+  </style>
+</head>
+<body>
+  <h1>Live TV Stream Test</h1>
+  <p>Testing Kids channels through the proxy...</p>
+  <div id="channels"></div>
+
+<script>
+const channels = [
+  { name: 'Cartoon Network', proxy: '/api/iptv/proxy?url=http%3A%2F%2F23.237.104.106%3A8080%2FUSA_CARTOON_NETWORK%2Findex.m3u8' },
+  { name: 'Nickelodeon', proxy: '/api/iptv/proxy?url=http%3A%2F%2F23.237.104.106%3A8080%2FUSA_NICKELODEON%2Findex.m3u8' },
+  { name: 'Disney Junior', proxy: '/api/iptv/proxy?url=http%3A%2F%2F23.237.104.106%3A8080%2FUSA_DISNEY_JUNIOR%2Findex.m3u8' },
+  { name: 'PBS Kids', proxy: '/api/iptv/proxy?url=https%3A%2F%2Flivestream.pbskids.org%2Fout%2Fv1%2F14507d931bbe48a69287e4850e53443c%2Fest.m3u8' },
+  { name: 'Boomerang', proxy: '/api/iptv/proxy?url=http%3A%2F%2F23.237.104.106%3A8080%2FUSA_BOOMERANG%2Findex.m3u8' },
+];
+
+const container = document.getElementById('channels');
+
+channels.forEach((ch, i) => {
+  const div = document.createElement('div');
+  div.className = 'channel';
+  div.innerHTML = `
+    <h3>${ch.name} <span id="status-${i}" class="status loading">Loading...</span></h3>
+    <video id="video-${i}" controls muted playsinline></video>
+  `;
+  container.appendChild(div);
+
+  const video = document.getElementById(`video-${i}`);
+  const status = document.getElementById(`status-${i}`);
+
+  if (Hls.isSupported()) {
+    const hls = new Hls({
+      enableWorker: true,
+      maxBufferLength: 30,
+      manifestLoadingTimeOut: 20000,
+      fragLoadingTimeOut: 20000,
+    });
+
+    hls.loadSource(ch.proxy);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => {});
+    });
+
+    video.addEventListener('playing', () => {
+      status.textContent = 'Playing!';
+      status.className = 'status playing';
+    });
+
+    hls.on(Hls.Events.ERROR, (e, data) => {
+      if (data.fatal) {
+        status.textContent = 'Error: ' + data.type;
+        status.className = 'status error';
+        console.error(ch.name, data);
+      }
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = ch.proxy;
+    video.play().catch(() => {});
+    video.addEventListener('playing', () => {
+      status.textContent = 'Playing!';
+      status.className = 'status playing';
+    });
+  }
+});
+</script>
+</body>
+</html>
