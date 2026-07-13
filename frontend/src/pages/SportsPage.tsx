@@ -1339,7 +1339,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
       return;
     }
     setTesting(true);
-    fetch(`${API_BASE}/api/sports/test-streams`, {
+    fetch(`${API_BASE}/api/sports-v2/test-streams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ streams: match.streams }),
@@ -1363,7 +1363,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
     if (!activeStream || !videoRef.current) return;
     setLoading(true);
     setError(null);
-    const proxyUrl = `${API_BASE}/api/sports/stream-proxy?url=${encodeURIComponent(activeStream.url)}`;
+    const proxyUrl = `${API_BASE}/api/sports-v2/stream-proxy?url=${encodeURIComponent(activeStream.url)}`;
     const video = videoRef.current;
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     if (Hls.isSupported()) {
@@ -1697,7 +1697,7 @@ export default function SportsPage() {
           }));
         setMatches(normalized);
       } else {
-        const res = await fetch(`${API_BASE}/api/sports/matches?sport=${sport}`);
+        const res = await fetch(`${API_BASE}/api/sports-v2/matches`);
         if (!res.ok) throw new Error('Failed to fetch matches');
         const data = await res.json();
         const raw = data.matches || [];
@@ -1761,7 +1761,7 @@ export default function SportsPage() {
   const handleViewDetails = useCallback((match: Match) => {
     // For finished matches, always fetch full details to ensure replays/highlights are loaded
     if (match.status === 'FINISHED') {
-      fetch(`${API_BASE}/api/sports/match/${match.id}`)
+      fetch(`${API_BASE}/api/sports-v2/match/${match.id}`)
         .then(r => r.json())
         .then(data => {
           if (data.success && data.match) {
