@@ -48,6 +48,7 @@ const STATUS_MAP = {
   'HalfTime': 'HALF_TIME',
   'Postponed': 'POSTPONED',
   'Cancelled': 'CANCELLED',
+  'MatchNotStart': 'UPCOMING',
 };
 
 const STATUS_LIVE_MAP = {
@@ -55,6 +56,7 @@ const STATUS_LIVE_MAP = {
   1: 'LIVE',
   2: 'HALF_TIME',
   3: 'FINISHED',
+  'Living': 'LIVE',
 };
 
 // ─── Cache ──────────────────────────────────────────────────────────────────
@@ -98,7 +100,26 @@ async function fetchFromAPI(endpoint, params = {}) {
 function normalizeMatch(raw) {
   const statusLive = raw.statusLive ?? 0;
   const statusText = raw.status || '';
-  const status = STATUS_MAP[statusText] || STATUS_LIVE_MAP[statusLive] || 'UNKNOWN';
+  let status = STATUS_MAP[statusText] || STATUS_LIVE_MAP[statusLive] || 'UNKNOWN';
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const matchStartSec = raw.startTime ? Math.floor(Number(raw.startTime) / 1000) : null;
+  const homeScore = raw.team1?.score ?? '';
+  const awayScore = raw.team2?.score ?? '';
+  const isZeroZero = homeScore === '0' && awayScore === '0';
+  const isFutureMatch = matchStartSec !== null && matchStartSec > nowSec;
+
+  // ── Safety checks for incorrectly classified matches ────────────────
+
+  // If marked FINISHED but 0:0 and hasn't started yet → treat as UPCOMING
+  if (status === 'FINISHED' && isZeroZero && isFutureMatch) {
+    status = 'UPCOMING';
+  }
+
+  // If status is UNKNOWN but match is in the future → assume UPCOMING
+  if (status === 'UNKNOWN' && isFutureMatch) {
+    status = 'UPCOMING';
+  }
 
   // Parse streams from playSource
   const streams = (raw.playSource || []).map((src, idx) => ({
