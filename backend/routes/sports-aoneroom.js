@@ -163,7 +163,7 @@ function normalizeMatch(raw) {
     minute: raw.timeDesc || '',
     league: raw.league || '',
     matchRound: raw.matchRound || '',
-    startTime: raw.startTime ? Math.floor(raw.startTime / 1000) : null,
+    startTime: raw.startTime ? Number(raw.startTime) : null,
     endTime: raw.endTime ? Math.floor(raw.endTime / 1000) : null,
     sportType: raw.type || 'football',
     playType: raw.playType || '',

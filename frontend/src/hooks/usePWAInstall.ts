@@ -31,6 +31,21 @@ export interface PWAInstallState {
 const BANNER_DISMISSED_KEY = 'zentrix-install-banner-dismissed';
 const INSTALL_PROMPT_SEEN_KEY = 'zentrix-install-prompt-seen';
 
+// Module-level capture — beforeinstallprompt fires before React mounts,
+// so we capture it at the script level to ensure we never miss it.
+let capturedPrompt: BeforeInstallPromptEvent | null = null;
+let promptCaptured = false;
+
+function captureInstallPrompt(e: Event) {
+  e.preventDefault();
+  capturedPrompt = e as BeforeInstallPromptEvent;
+  promptCaptured = true;
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', captureInstallPrompt);
+}
+
 export function usePWAInstall(): PWAInstallState {
   const [canInstall, setCanInstall] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -55,9 +70,19 @@ export function usePWAInstall(): PWAInstallState {
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIOS(ios);
 
-    // Listen for beforeinstallprompt event (Android/Chrome)
+    // Use the module-level captured prompt if available (most common case —
+    // beforeinstallprompt fires early in page load before React hydrates)
+    if (capturedPrompt && !deferredPrompt.current) {
+      deferredPrompt.current = capturedPrompt;
+      setCanInstall(true);
+      setIsInstalled(false);
+    }
+
+    // Also listen for late-fired beforeinstallprompt events (e.g., after
+    // user interaction or when criteria are met later in the session)
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+      capturedPrompt = e as BeforeInstallPromptEvent;
       deferredPrompt.current = e as BeforeInstallPromptEvent;
       setCanInstall(true);
       setIsInstalled(false);
@@ -68,6 +93,7 @@ export function usePWAInstall(): PWAInstallState {
       setIsInstalled(true);
       setCanInstall(false);
       deferredPrompt.current = null;
+      capturedPrompt = null;
       localStorage.setItem(INSTALL_PROMPT_SEEN_KEY, 'true');
     };
 
@@ -104,6 +130,7 @@ export function usePWAInstall(): PWAInstallState {
         setCanInstall(false);
       }
       deferredPrompt.current = null;
+      capturedPrompt = null;
       localStorage.setItem(INSTALL_PROMPT_SEEN_KEY, 'true');
     } catch {
       // Prompt failed
