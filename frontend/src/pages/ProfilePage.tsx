@@ -7,8 +7,9 @@ import {
   Edit2, Check, Film, Tv, Sparkles, MapPin,
   Camera, X, Upload, LayoutDashboard,
   User as UserIcon, FileText, Lock, MessageCircle,
-  Loader2, AlertCircle,
+  Loader2, AlertCircle, Smartphone,
 } from 'lucide-react';
+import InstallAppButton from '@/components/pwa/InstallAppButton';
 import { useAuthStore } from '@/store/useAuthStore';
 import { checkDisplayNameAvailable } from '@/lib/supabase';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
@@ -137,6 +138,12 @@ export default function ProfilePage() {
   ];
 
   const menuSections = [
+    {
+      title: 'App',
+      items: [
+        { icon: Smartphone, label: 'Install App', action: 'install' as const },
+      ],
+    },
     {
       title: 'Account',
       items: [
@@ -353,18 +360,24 @@ export default function ProfilePage() {
           style={{ background: 'rgba(10,12,24,0.8)', backdropFilter: 'blur(16px)' }}
         >
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider px-4 pt-3 pb-2">{section.title}</p>
-          {section.items.map(({ icon: Icon, label, action, isCta }, i) => (
-            <button key={label} onClick={action}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/[0.03] transition-colors group border-t border-white/[0.04] ${isCta ? 'bg-primary-500/[0.04]' : ''}`}
-            >
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${isCta ? 'bg-primary-500/20 group-hover:bg-primary-500/30' : 'bg-white/5 group-hover:bg-white/10'}`}>
-                <Icon size={14} className={isCta ? 'text-primary-400' : 'text-gray-400'} />
-              </div>
-              <span className={`flex-1 text-sm text-left font-medium ${isCta ? 'text-primary-300' : 'text-gray-300'}`}>{label}</span>
-              {isCta && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-400 font-semibold border border-primary-500/20">Chat</span>}
-              <ChevronRight size={14} className={`${isCta ? 'text-primary-600' : 'text-gray-700'} group-hover:text-gray-500 transition-colors`} />
-            </button>
-          ))}
+          {section.items.map(({ icon: Icon, label, action, isCta }, i) => {
+            // Special case: Install App action
+            if (action === 'install') {
+              return <InstallAppButton key={label} variant="row" />;
+            }
+            return (
+              <button key={label} onClick={action}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/[0.03] transition-colors group border-t border-white/[0.04] ${isCta ? 'bg-primary-500/[0.04]' : ''}`}
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${isCta ? 'bg-primary-500/20 group-hover:bg-primary-500/30' : 'bg-white/5 group-hover:bg-white/10'}`}>
+                  <Icon size={14} className={isCta ? 'text-primary-400' : 'text-gray-400'} />
+                </div>
+                <span className={`flex-1 text-sm text-left font-medium ${isCta ? 'text-primary-300' : 'text-gray-300'}`}>{label}</span>
+                {isCta && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-400 font-semibold border border-primary-500/20">Chat</span>}
+                <ChevronRight size={14} className={`${isCta ? 'text-primary-600' : 'text-gray-700'} group-hover:text-gray-500 transition-colors`} />
+              </button>
+            );
+          })}
         </motion.div>
       ))}
 

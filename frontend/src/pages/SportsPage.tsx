@@ -2027,20 +2027,23 @@ export default function SportsPage() {
           <div className="px-4 space-y-6">
             {/* Live Matches */}
             {live.length > (selectedLeague ? 0 : 1) && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="relative flex h-2 w-2">
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(239,68,68,0.25)', background: 'linear-gradient(180deg, rgba(239,68,68,0.08) 0%, rgba(5,8,22,0.5) 100%)' }}>
+                {/* Red Section Header */}
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.25), rgba(220,38,38,0.15))', borderBottom: '1px solid rgba(239,68,68,0.25)' }}>
+                  <div className="relative flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
                   </div>
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    Live Now
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', color: '#ff6b6b' }}>
+                  <h2 className="text-sm font-black tracking-wide flex items-center gap-2" style={{ color: '#ff6b6b' }}>
+                    LIVE
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.2)', color: '#ff6b6b', border: '1px solid rgba(239,68,68,0.3)' }}>
                       {live.length}
                     </span>
                   </h2>
+                  <div className="flex-1" />
+                  <span className="text-[10px] font-semibold" style={{ color: 'rgba(239,68,68,0.6)' }}>Happening now</span>
                 </div>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="p-3 grid grid-cols-1 gap-3">
                   {live.slice(selectedLeague ? 0 : 1).map((m, i) => (
                     <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} source={source} index={i} />
                   ))}
@@ -2048,19 +2051,27 @@ export default function SportsPage() {
               </section>
             )}
 
+            {/* Spacer between sections */}
+            {live.length > (selectedLeague ? 0 : 1) && upcoming.length > 0 && (
+              <div className="h-4" />
+            )}
+
             {/* Upcoming */}
             {upcoming.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <Clock size={14} style={{ color: '#f0c040' }} />
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    Upcoming
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(234,179,8,0.1)', color: '#f0c040' }}>
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(234,179,8,0.2)', background: 'linear-gradient(180deg, rgba(234,179,8,0.06) 0%, rgba(5,8,22,0.5) 100%)' }}>
+                {/* Yellow Section Header */}
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(234,179,8,0.2), rgba(202,138,4,0.12))', borderBottom: '1px solid rgba(234,179,8,0.2)' }}>
+                  <Clock size={16} style={{ color: '#f0c040' }} />
+                  <h2 className="text-sm font-black tracking-wide flex items-center gap-2" style={{ color: '#f0c040' }}>
+                    UPCOMING
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#f0c040', border: '1px solid rgba(234,179,8,0.25)' }}>
                       {upcoming.length}
                     </span>
                   </h2>
+                  <div className="flex-1" />
+                  <span className="text-[10px] font-semibold" style={{ color: 'rgba(240,192,64,0.5)' }}>Starting soon</span>
                 </div>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="p-3 grid grid-cols-1 gap-3">
                   {upcoming.map((m, i) => (
                     <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} source={source} index={i} />
                   ))}
@@ -2068,19 +2079,30 @@ export default function SportsPage() {
               </section>
             )}
 
+            {/* Spacer between sections */}
+            {upcoming.length > 0 && finished.length > 0 && (
+              <div className="h-4" />
+            )}
+            {live.length > (selectedLeague ? 0 : 1) && upcoming.length === 0 && finished.length > 0 && (
+              <div className="h-4" />
+            )}
+
             {/* Finished */}
             {finished.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 size={14} style={{ color: '#8899AA' }} />
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    Finished
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(100,116,139,0.1)', color: '#8899AA' }}>
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(100,116,139,0.2)', background: 'linear-gradient(180deg, rgba(100,116,139,0.06) 0%, rgba(5,8,22,0.5) 100%)' }}>
+                {/* Grey Section Header */}
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(100,116,139,0.2), rgba(71,85,105,0.12))', borderBottom: '1px solid rgba(100,116,139,0.2)' }}>
+                  <CheckCircle2 size={16} style={{ color: '#94a3b8' }} />
+                  <h2 className="text-sm font-black tracking-wide flex items-center gap-2" style={{ color: '#94a3b8' }}>
+                    FINISHED
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.25)' }}>
                       {finished.length}
                     </span>
                   </h2>
+                  <div className="flex-1" />
+                  <span className="text-[10px] font-semibold" style={{ color: 'rgba(148,163,184,0.5)' }}>Full time</span>
                 </div>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="p-3 grid grid-cols-1 gap-3">
                   {finished.map((m, i) => (
                     <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} source={source} index={i} />
                   ))}

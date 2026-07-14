@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Bell, User, X, ChevronDown,
   Bookmark, Clock, Settings, LogOut, Clapperboard,
-  Flame
+  Flame, Download
 } from 'lucide-react';
+import InstallAppButton from '../pwa/InstallAppButton';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const navLinks = [
@@ -259,6 +260,10 @@ export default function Navbar() {
                             {label}
                           </Link>
                         ))}
+                        {/* Install App Button */}
+                        <div className="border-t border-white/[0.04] mt-1 pt-1">
+                          <InstallAppButton variant="menu" onClick={() => setUserMenuOpen(false)} />
+                        </div>
                       </div>
                       <div className="p-1.5 border-t border-white/[0.06]">
                         <button
@@ -356,6 +361,7 @@ export default function Navbar() {
                       <User size={16} className="text-gray-600" />
                       Profile & Settings
                     </Link>
+                    <InstallAppButton variant="menu" onClick={() => setMenuOpen(false)} />
                     <button onClick={() => { logout(); setMenuOpen(false); }}
                       className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-colors">
                       <LogOut size={16} />
@@ -363,11 +369,14 @@ export default function Navbar() {
                     </button>
                   </div>
                 ) : (
-                  <Link to="/auth" onClick={() => setMenuOpen(false)}
-                    className="flex items-center justify-center h-12 rounded-xl btn-primary text-sm font-semibold">
-                    <Flame size={16} />
-                    Sign In to Stream
-                  </Link>
+                  <div className="space-y-2">
+                    <InstallAppButton variant="menu" onClick={() => setMenuOpen(false)} />
+                    <Link to="/auth" onClick={() => setMenuOpen(false)}
+                      className="flex items-center justify-center h-12 rounded-xl btn-primary text-sm font-semibold w-full">
+                      <Flame size={16} />
+                      Sign In to Stream
+                    </Link>
+                  </div>
                 )}
               </div>
             </div>
