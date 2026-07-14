@@ -1,19 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * SPORTS API ROUTE — Live Match Data & Streams
+ * SPORTS API ROUTE — h5-sport-api.aoneroom.com Integration
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Primary Source: h5-sport-api.aoneroom.com
- *   - GET /api/sports/leagues — List available leagues
- *   - GET /api/sports/matches?leagueId=<id> — Match listings by league
- *   - GET /api/sports/match/:id — Match details & streams
- *   - GET /api/sports/stream-proxy?url=<m3u8_url> — Stream proxy
- *   - POST /api/sports/test-streams — Test stream availability
- *
- * Leagues:
- *   - FIFA World Cup: 4186762757372631736
- *   - NBA: 1247297119346653536
- *   - All: 0
+ *   - GET /api/sports-v2/leagues — List available leagues
+ *   - GET /api/sports-v2/matches?leagueId=<id> — Match listings by league
+ *   - GET /api/sports-v2/match/:id — Match details with replays & highlights
+ *   - GET /api/sports-v2/stream-proxy?url=<m3u8_url> — Stream proxy
+ *   - POST /api/sports-v2/test-streams — Test stream availability
  *
  * Features:
  *   - Live matches with English streams
@@ -48,11 +43,13 @@ const STREAM_HEADERS = {
 
 const STATUS_MAP = {
   'Live': 'LIVE',
+  'MatchIng': 'LIVE',
   'MatchEnded': 'FINISHED',
   'Upcoming': 'UPCOMING',
   'HalfTime': 'HALF_TIME',
   'Postponed': 'POSTPONED',
   'Cancelled': 'CANCELLED',
+  'MatchNotStart': 'UPCOMING',
 };
 
 const STATUS_LIVE_MAP = {
@@ -60,12 +57,15 @@ const STATUS_LIVE_MAP = {
   1: 'LIVE',
   2: 'HALF_TIME',
   3: 'FINISHED',
+  'Living': 'LIVE',
+  'UnLive': 'UPCOMING',
 };
 
 // ─── Cache ──────────────────────────────────────────────────────────────────
 
 const cache = {};
-const CACHE_TTL = 60 * 1000; // 60 seconds
+const LIVE_CACHE_TTL = 15 * 1000;   // 15 seconds for live matches
+const DEFAULT_CACHE_TTL = 30 * 1000; // 30 seconds default
 
 const streamCache = {};
 const STREAM_CACHE_TTL = 2 * 60 * 1000;
@@ -98,20 +98,92 @@ async function fetchFromAPI(endpoint, params = {}) {
   return data.data;
 }
 
+// ─── Extract Real Stream URL ────────────────────────────────────────────────
+
+function extractStreamUrl(url) {
+  if (!url) return null;
+
+  // Already a direct m3u8 URL
+  if (url.match(/\.m3u8(?:\?|$)/i) && !url.includes('.html')) {
+    return url;
+  }
+
+  // 88player-style: https://play.88player.top/m3u8.html?url=REAL_M3U8
+  const urlParamMatch = url.match(/[?&]url=([^&]+)/i);
+  if (urlParamMatch) {
+    const decoded = decodeURIComponent(urlParamMatch[1]);
+    if (decoded.match(/\.m3u8(?:\?|$)/i)) {
+      return decoded;
+    }
+  }
+
+  // sportsteam368-style: return as-is for iframe embedding
+  if (url.includes('sportsteam368.com')) {
+    return url;
+  }
+
+  // If it looks like an HTML page but has an m3u8 in the query, try to extract
+  if (url.includes('.html') || url.includes('?')) {
+    const genericMatch = url.match(/[?&](?:url|src|video|stream)=([^&]+)/i);
+    if (genericMatch) {
+      const decoded = decodeURIComponent(genericMatch[1]);
+      if (decoded.match(/\.m3u8(?:\?|$)/i) || decoded.startsWith('http')) {
+        return decoded;
+      }
+    }
+  }
+
+  return url; // fallback: return original
+}
+
 // ─── Normalize Match ────────────────────────────────────────────────────────
 
 function normalizeMatch(raw) {
   const statusLive = raw.statusLive ?? 0;
   const statusText = raw.status || '';
-  const status = STATUS_MAP[statusText] || STATUS_LIVE_MAP[statusLive] || 'UNKNOWN';
+  let status = STATUS_MAP[statusText] || STATUS_LIVE_MAP[statusLive] || 'UNKNOWN';
 
-  // Parse streams from playSource
-  const streams = (raw.playSource || []).map((src, idx) => ({
-    name: src.title || `Channel ${idx + 1}`,
-    url: src.path || '',
-    type: 'hls',
-    quality: 'HD',
-  })).filter(s => s.url);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const matchStartSec = raw.startTime ? Math.floor(Number(raw.startTime) / 1000) : null;
+  const homeScore = raw.team1?.score ?? '';
+  const awayScore = raw.team2?.score ?? '';
+  const isZeroZero = homeScore === '0' && awayScore === '0';
+  const isFutureMatch = matchStartSec !== null && matchStartSec > nowSec;
+
+  // ── Safety checks for incorrectly classified matches ────────────────
+
+  // If marked FINISHED but 0:0 and hasn't started yet → treat as UPCOMING
+  if (status === 'FINISHED' && isZeroZero && isFutureMatch) {
+    status = 'UPCOMING';
+  }
+
+  // If status is UNKNOWN but match is in the future → assume UPCOMING
+  if (status === 'UNKNOWN' && isFutureMatch) {
+    status = 'UPCOMING';
+  }
+
+  // If status is UNKNOWN but match has already started → assume LIVE
+  if (status === 'UNKNOWN' && matchStartSec !== null && matchStartSec <= nowSec) {
+    status = 'LIVE';
+  }
+
+  // If API says MatchIng (match in progress) but statusLive says UnLive,
+  // trust the MatchIng status and mark as LIVE
+  if (statusText === 'MatchIng' && status !== 'LIVE') {
+    status = 'LIVE';
+  }
+
+  // Parse streams from playSource — extract real m3u8 from HTML wrappers
+  const streams = (raw.playSource || []).map((src, idx) => {
+    const extracted = extractStreamUrl(src.path || '');
+    return {
+      name: src.title || `Channel ${idx + 1}`,
+      url: extracted || '',
+      originalUrl: src.path || '',
+      type: 'hls',
+      quality: 'HD',
+    };
+  }).filter(s => s.url);
 
   // Parse replays
   const replays = (raw.replay || []).map((r, idx) => ({
@@ -147,7 +219,7 @@ function normalizeMatch(raw) {
     minute: raw.timeDesc || '',
     league: raw.league || '',
     matchRound: raw.matchRound || '',
-    startTime: raw.startTime ? Math.floor(raw.startTime / 1000) : null,
+    startTime: raw.startTime ? Number(raw.startTime) : null,
     endTime: raw.endTime ? Math.floor(raw.endTime / 1000) : null,
     sportType: raw.type || 'football',
     playType: raw.playType || '',
@@ -167,7 +239,11 @@ async function fetchMatches(leagueId = '0') {
   const cacheKey = `matches:${leagueId}`;
   const now = Date.now();
 
-  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < CACHE_TTL) {
+  // Check if any match is live — use shorter TTL for live matches
+  const hasLiveMatch = cache[cacheKey]?.data?.live > 0;
+  const cacheTtl = hasLiveMatch ? LIVE_CACHE_TTL : DEFAULT_CACHE_TTL;
+
+  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < cacheTtl) {
     return cache[cacheKey].data;
   }
 
@@ -176,15 +252,9 @@ async function fetchMatches(leagueId = '0') {
     const rawMatches = data.list || [];
     const matches = rawMatches.map(normalizeMatch);
 
-    // Sort: LIVE first, then HALF_TIME, then UPCOMING, then FINISHED
-    // Within each status group, football/soccer matches come first
+    // Sort: LIVE first, then UPCOMING, then FINISHED
     const statusOrder = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
-    const isFootball = (m) => m.sportType === 'football' || m.sportType === 'soccer' ? 0 : 1;
-    matches.sort((a, b) => {
-      const statusDiff = (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
-      if (statusDiff !== 0) return statusDiff;
-      return isFootball(a) - isFootball(b);
-    });
+    matches.sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4));
 
     const result = {
       matches,
@@ -229,7 +299,7 @@ async function fetchLeagues() {
   const cacheKey = 'leagues';
   const now = Date.now();
 
-  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < CACHE_TTL) {
+  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < DEFAULT_CACHE_TTL) {
     return cache[cacheKey].data;
   }
 
@@ -297,7 +367,7 @@ async function testStream(url) {
 // ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── GET /api/sports/leagues ────────────────────────────────────────────────
+// ─── GET /api/sports-v2/leagues ─────────────────────────────────────────────
 router.get('/leagues', async (_req, res) => {
   try {
     const result = await fetchLeagues();
@@ -307,8 +377,7 @@ router.get('/leagues', async (_req, res) => {
   }
 });
 
-// ─── GET /api/sports/matches ────────────────────────────────────────────────
-// Query: ?leagueId=<id> (default: 0 = all)
+// ─── GET /api/sports-v2/matches ─────────────────────────────────────────────
 router.get('/matches', async (req, res) => {
   try {
     const leagueId = req.query.leagueId || '0';
@@ -319,7 +388,7 @@ router.get('/matches', async (req, res) => {
   }
 });
 
-// ─── GET /api/sports/match/:id ──────────────────────────────────────────────
+// ─── GET /api/sports-v2/match/:id ───────────────────────────────────────────
 router.get('/match/:id', async (req, res) => {
   try {
     const matchId = req.params.id;
@@ -335,7 +404,7 @@ router.get('/match/:id', async (req, res) => {
   }
 });
 
-// ─── POST /api/sports/test-streams ──────────────────────────────────────────
+// ─── POST /api/sports-v2/test-streams ───────────────────────────────────────
 router.post('/test-streams', async (req, res) => {
   try {
     const { streams = [] } = req.body;
@@ -343,8 +412,10 @@ router.post('/test-streams', async (req, res) => {
 
     const results = await Promise.all(
       streams.map(async (s) => {
-        const result = await testStream(s.url);
-        return { ...s, ok: result.ok, ms: result.ms };
+        // Resolve HTML wrapper URLs to their actual m3u8
+        const resolved = extractStreamUrl(s.url || s.originalUrl || '');
+        const result = await testStream(resolved);
+        return { ...s, url: resolved, ok: result.ok, ms: result.ms };
       })
     );
 
@@ -360,7 +431,7 @@ router.post('/test-streams', async (req, res) => {
   }
 });
 
-// ─── GET /api/sports/stream-proxy ───────────────────────────────────────────
+// ─── GET /api/sports-v2/stream-proxy ────────────────────────────────────────
 router.get('/stream-proxy', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
@@ -387,7 +458,7 @@ router.get('/stream-proxy', async (req, res) => {
       res.setHeader('Content-Length', streamResp.headers.get('content-length'));
     }
     if (streamResp.headers.get('content-range')) {
-      res.setHeader('Content-Ranges', streamResp.headers.get('content-range'));
+      res.setHeader('Content-Range', streamResp.headers.get('content-range'));
     }
 
     if (url.includes('.m3u8') && !rangeHeader) {
@@ -398,7 +469,7 @@ router.get('/stream-proxy', async (req, res) => {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) return line;
         const absUrl = trimmed.startsWith('http') ? trimmed : baseUrl + trimmed;
-        return `${host}/api/sports/stream-proxy?url=${encodeURIComponent(absUrl)}`;
+        return `${host}/api/sports-v2/stream-proxy?url=${encodeURIComponent(absUrl)}`;
       }).join('\n');
       return res.send(rewritten);
     }
@@ -409,7 +480,7 @@ router.get('/stream-proxy', async (req, res) => {
   }
 });
 
-// ─── GET /api/sports/logo-proxy ─────────────────────────────────────────────
+// ─── GET /api/sports-v2/logo-proxy ──────────────────────────────────────────
 router.get('/logo-proxy', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
@@ -436,6 +507,109 @@ router.get('/logo-proxy', async (req, res) => {
     logoResp.body.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/sports-v2/resolve-stream ──────────────────────────────────────
+// Resolves a stream URL to its actual playable form
+router.get('/resolve-stream', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  const resolved = extractStreamUrl(url);
+
+  // If the original is an HTML page and we extracted a different URL
+  const isHtmlWrapper = url !== resolved;
+
+  res.json({
+    success: true,
+    original: url,
+    resolved: resolved || url,
+    isHtmlWrapper,
+    type: resolved?.match(/\.m3u8(?:\?|$)/i) ? 'hls' : 'html',
+  });
+});
+
+// ─── GET /api/sports-v2/iframe-player ───────────────────────────────────────
+// Returns an HTML page with an iframe player for HTML-only streams
+router.get('/iframe-player', async (req, res) => {
+  const { url, title = 'Live Stream' } = req.query;
+  if (!url) return res.status(400).send('url required');
+
+  const decodedUrl = decodeURIComponent(url);
+  const resolved = extractStreamUrl(decodedUrl);
+
+  // If we can extract a direct m3u8, redirect to it
+  if (resolved && resolved.match(/\.m3u8(?:\?|$)/i) && !resolved.includes('.html')) {
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    return res.redirect(`/api/sports-v2/stream-proxy?url=${encodeURIComponent(resolved)}`);
+  }
+
+  // Otherwise serve an iframe player
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+    iframe { width: 100%; height: 100%; border: none; }
+    .error { color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: system-ui; flex-direction: column; gap: 10px; }
+    .error a { color: #22D3EE; }
+  </style>
+</head>
+<body>
+  <iframe src="${resolved || decodedUrl}" allowfullscreen sandbox="allow-scripts allow-same-origin allow-presentation"></iframe>
+</body>
+</html>`;
+
+  res.setHeader('Content-Type', 'text/html');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(html);
+});
+
+// ─── TrustVerse Integration ─────────────────────────────────────────────────
+// Proxies TrustVerse live sports data as a fallback source
+
+const TRUSTVERSE_BASE = 'https://trust-verse-final-17.vercel.app';
+
+async function fetchTrustVerseData() {
+  const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+  try {
+    // Try to fetch their sports data page
+    const resp = await fetch(`${TRUSTVERSE_BASE}/api/sports-data`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+      timeout: 15000,
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      return data;
+    }
+  } catch (e) {
+    // TrustVerse API not available
+  }
+  return null;
+}
+
+// ─── GET /api/sports-v2/trustverse/matches ──────────────────────────────────
+router.get('/trustverse/matches', async (_req, res) => {
+  try {
+    const data = await fetchTrustVerseData();
+    if (!data) {
+      return res.status(503).json({
+        success: false,
+        error: 'TrustVerse data source temporarily unavailable',
+        matches: [],
+      });
+    }
+    res.json({ success: true, source: 'trustverse', ...data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, matches: [] });
   }
 });
 

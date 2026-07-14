@@ -98,6 +98,44 @@ async function fetchFromAPI(endpoint, params = {}) {
   return data.data;
 }
 
+// ─── Extract Real Stream URL ────────────────────────────────────────────────
+
+function extractStreamUrl(url) {
+  if (!url) return null;
+
+  // Already a direct m3u8 URL
+  if (url.match(/\.m3u8(?:\?|$)/i) && !url.includes('.html')) {
+    return url;
+  }
+
+  // 88player-style: https://play.88player.top/m3u8.html?url=REAL_M3U8
+  const urlParamMatch = url.match(/[?&]url=([^&]+)/i);
+  if (urlParamMatch) {
+    const decoded = decodeURIComponent(urlParamMatch[1]);
+    if (decoded.match(/\.m3u8(?:\?|$)/i)) {
+      return decoded;
+    }
+  }
+
+  // sportsteam368-style: return as-is for iframe embedding
+  if (url.includes('sportsteam368.com')) {
+    return url;
+  }
+
+  // If it looks like an HTML page but has an m3u8 in the query, try to extract
+  if (url.includes('.html') || url.includes('?')) {
+    const genericMatch = url.match(/[?&](?:url|src|video|stream)=([^&]+)/i);
+    if (genericMatch) {
+      const decoded = decodeURIComponent(genericMatch[1]);
+      if (decoded.match(/\.m3u8(?:\?|$)/i) || decoded.startsWith('http')) {
+        return decoded;
+      }
+    }
+  }
+
+  return url; // fallback: return original
+}
+
 // ─── Normalize Match ────────────────────────────────────────────────────────
 
 function normalizeMatch(raw) {
@@ -135,13 +173,17 @@ function normalizeMatch(raw) {
     status = 'LIVE';
   }
 
-  // Parse streams from playSource
-  const streams = (raw.playSource || []).map((src, idx) => ({
-    name: src.title || `Channel ${idx + 1}`,
-    url: src.path || '',
-    type: 'hls',
-    quality: 'HD',
-  })).filter(s => s.url);
+  // Parse streams from playSource — extract real m3u8 from HTML wrappers
+  const streams = (raw.playSource || []).map((src, idx) => {
+    const extracted = extractStreamUrl(src.path || '');
+    return {
+      name: src.title || `Channel ${idx + 1}`,
+      url: extracted || '',
+      originalUrl: src.path || '',
+      type: 'hls',
+      quality: 'HD',
+    };
+  }).filter(s => s.url);
 
   // Parse replays
   const replays = (raw.replay || []).map((r, idx) => ({
@@ -370,8 +412,10 @@ router.post('/test-streams', async (req, res) => {
 
     const results = await Promise.all(
       streams.map(async (s) => {
-        const result = await testStream(s.url);
-        return { ...s, ok: result.ok, ms: result.ms };
+        // Resolve HTML wrapper URLs to their actual m3u8
+        const resolved = extractStreamUrl(s.url || s.originalUrl || '');
+        const result = await testStream(resolved);
+        return { ...s, url: resolved, ok: result.ok, ms: result.ms };
       })
     );
 
@@ -463,6 +507,109 @@ router.get('/logo-proxy', async (req, res) => {
     logoResp.body.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/sports-v2/resolve-stream ──────────────────────────────────────
+// Resolves a stream URL to its actual playable form
+router.get('/resolve-stream', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  const resolved = extractStreamUrl(url);
+
+  // If the original is an HTML page and we extracted a different URL
+  const isHtmlWrapper = url !== resolved;
+
+  res.json({
+    success: true,
+    original: url,
+    resolved: resolved || url,
+    isHtmlWrapper,
+    type: resolved?.match(/\.m3u8(?:\?|$)/i) ? 'hls' : 'html',
+  });
+});
+
+// ─── GET /api/sports-v2/iframe-player ───────────────────────────────────────
+// Returns an HTML page with an iframe player for HTML-only streams
+router.get('/iframe-player', async (req, res) => {
+  const { url, title = 'Live Stream' } = req.query;
+  if (!url) return res.status(400).send('url required');
+
+  const decodedUrl = decodeURIComponent(url);
+  const resolved = extractStreamUrl(decodedUrl);
+
+  // If we can extract a direct m3u8, redirect to it
+  if (resolved && resolved.match(/\.m3u8(?:\?|$)/i) && !resolved.includes('.html')) {
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    return res.redirect(`/api/sports-v2/stream-proxy?url=${encodeURIComponent(resolved)}`);
+  }
+
+  // Otherwise serve an iframe player
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+    iframe { width: 100%; height: 100%; border: none; }
+    .error { color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: system-ui; flex-direction: column; gap: 10px; }
+    .error a { color: #22D3EE; }
+  </style>
+</head>
+<body>
+  <iframe src="${resolved || decodedUrl}" allowfullscreen sandbox="allow-scripts allow-same-origin allow-presentation"></iframe>
+</body>
+</html>`;
+
+  res.setHeader('Content-Type', 'text/html');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(html);
+});
+
+// ─── TrustVerse Integration ─────────────────────────────────────────────────
+// Proxies TrustVerse live sports data as a fallback source
+
+const TRUSTVERSE_BASE = 'https://trust-verse-final-17.vercel.app';
+
+async function fetchTrustVerseData() {
+  const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+  try {
+    // Try to fetch their sports data page
+    const resp = await fetch(`${TRUSTVERSE_BASE}/api/sports-data`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+      timeout: 15000,
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      return data;
+    }
+  } catch (e) {
+    // TrustVerse API not available
+  }
+  return null;
+}
+
+// ─── GET /api/sports-v2/trustverse/matches ──────────────────────────────────
+router.get('/trustverse/matches', async (_req, res) => {
+  try {
+    const data = await fetchTrustVerseData();
+    if (!data) {
+      return res.status(503).json({
+        success: false,
+        error: 'TrustVerse data source temporarily unavailable',
+        matches: [],
+      });
+    }
+    res.json({ success: true, source: 'trustverse', ...data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, matches: [] });
   }
 });
 

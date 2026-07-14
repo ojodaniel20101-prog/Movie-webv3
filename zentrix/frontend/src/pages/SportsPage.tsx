@@ -39,6 +39,36 @@ interface Highlight {
   views: string;
 }
 
+interface EmbedhdStream {
+  hd: number;
+  link: string;
+}
+
+interface PeriodScore {
+  name: string;
+  home: string | number;
+  away: string | number;
+}
+
+interface MatchEvent {
+  time: string;
+  type: 'goal' | 'card' | 'substitution' | 'penalty' | 'var' | 'halftime' | 'fulltime';
+  team: 'home' | 'away';
+  player?: string;
+  detail?: string;
+}
+
+interface MatchStats {
+  possession?: [number, number];
+  shots?: [number, number];
+  shotsOnTarget?: [number, number];
+  corners?: [number, number];
+  fouls?: [number, number];
+  yellowCards?: [number, number];
+  redCards?: [number, number];
+  offsides?: [number, number];
+}
+
 interface Match {
   id: string;
   homeTeam: string;
@@ -47,28 +77,28 @@ interface Match {
   awayLogo: string;
   homeScore: string;
   awayScore: string;
-  homeAbbreviation: string;
-  awayAbbreviation: string;
-  status: 'LIVE' | 'UPCOMING' | 'FINISHED' | 'HALF_TIME' | 'UNKNOWN' | string;
-  statusLive: number;
-  minute: string;
+  status: 'LIVE' | 'UPCOMING' | 'FINISHED' | 'HALF_TIME' | string;
   streams: Stream[];
+  embedhdStreams?: EmbedhdStream[];
   startTime: number | null;
-  league: string;
-  matchRound: string;
-  sportType: string;
-  playPath: string;
-  hasVideo: boolean;
-  hasText: boolean;
+  league: string | null;
+  round?: string;
+  periodScores?: PeriodScore[];
+  events?: MatchEvent[];
+  stats?: MatchStats;
+  venue?: string;
+  referee?: string;
+  sportType?: string;
   replays: Replay[];
   highlights: Highlight[];
 }
 
-interface League {
-  id: string;
-  name: string;
-  localName: string;
-}
+const SPORTS = [
+  { key: 'football',   label: 'Football',   icon: '⚽' },
+  { key: 'basketball', label: 'Basketball', icon: '🏀' },
+  { key: 'tennis',     label: 'Tennis',     icon: '🎾' },
+  { key: 'cricket',    label: 'Cricket',    icon: '🏏' },
+];
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -79,6 +109,7 @@ function formatMatchTime(timestamp: number | null): string {
   const now = new Date();
   const date = new Date(timestamp * 1000);
 
+  // Reset hours to compare dates only
   const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const matchDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
@@ -134,6 +165,7 @@ function LivePulseBadge({ count }: { count: number }) {
         border: '1px solid rgba(239,68,68,0.4)',
       }}
     >
+      {/* Animated pulse rings */}
       <span className="relative flex h-2 w-2">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
@@ -146,9 +178,9 @@ function LivePulseBadge({ count }: { count: number }) {
 }
 
 // ─── Component: StatusBadge ──────────────────────────────────────────────────
-function StatusBadge({ status, size = 'sm', minute = '' }: { status: string; size?: 'sm' | 'md'; minute?: string }) {
+function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'md' }) {
   const isLive = status === 'LIVE';
-  const isUpcoming = status === 'UPCOMING';
+  const isUpcoming = status === 'UPCOMING' || status === 'UNKNOWN';
   const isHalfTime = status === 'HALF_TIME';
 
   const sizeClasses = size === 'md'
@@ -162,7 +194,7 @@ function StatusBadge({ status, size = 'sm', minute = '' }: { status: string; siz
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
       </span>
-      {minute || 'LIVE'}
+      LIVE
     </span>
   );
 
@@ -214,6 +246,79 @@ function TeamLogo({ src, name, size = 'md' }: { src?: string; name: string; size
       style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}
       onError={() => setErr(true)}
     />
+  );
+}
+
+// ─── Component: StatBar ──────────────────────────────────────────────────────
+function StatBar({ label, values, colors }: { label: string; values: [number, number]; colors?: [string, string] }) {
+  const total = values[0] + values[1];
+  const homePct = total === 0 ? 50 : (values[0] / total) * 100;
+  const awayPct = total === 0 ? 50 : (values[1] / total) * 100;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="font-bold" style={{ color: colors?.[0] || '#fff' }}>{values[0]}</span>
+        <span style={{ color: '#8899AA' }}>{label}</span>
+        <span className="font-bold" style={{ color: colors?.[1] || '#fff' }}>{values[1]}</span>
+      </div>
+      <div className="flex gap-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${homePct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="h-full rounded-full"
+          style={{ background: colors?.[0] || '#00D4FF' }}
+        />
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${awayPct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }}
+          className="h-full rounded-full"
+          style={{ background: colors?.[1] || '#8B5CF6' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Component: MatchEventTimeline ───────────────────────────────────────────
+function MatchEventTimeline({ events }: { events?: MatchEvent[] }) {
+  if (!events || events.length === 0) return null;
+
+  const eventIcons: Record<string, string> = {
+    goal: '⚽',
+    card: '🟨',
+    substitution: '🔄',
+    penalty: '🎯',
+    var: '📺',
+    halftime: '⏸️',
+    fulltime: '🏁',
+  };
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+        <Activity size={12} /> Match Events
+      </h4>
+      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+        {events.map((evt, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, x: evt.team === 'home' ? -10 : 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className="flex items-center gap-2 text-[11px]"
+          >
+            <span className="font-mono font-bold w-8 text-right" style={{ color: '#00D4FF' }}>{evt.time}'</span>
+            <span>{eventIcons[evt.type] || '•'}</span>
+            <span className={evt.team === 'home' ? 'text-left flex-1' : 'text-right flex-1'} style={{ color: '#e2e8f0' }}>
+              {evt.player}{evt.detail ? ` (${evt.detail})` : ''}
+            </span>
+          </motion.div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -301,13 +406,14 @@ function VideoModal({ title, url, onClose }: { title: string; url: string; onClo
 }
 
 // ─── Component: MatchDetailPanel ─────────────────────────────────────────────
-function MatchDetailPanel({ match, onClose, onPlay }: {
+function MatchDetailPanel({ match, onClose, onPlay, source }: {
   match: Match;
   onClose: () => void;
   onPlay: (match: Match) => void;
+  source: 'local' | 'english';
 }) {
   const [videoModal, setVideoModal] = useState<{ title: string; url: string } | null>(null);
-  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || match.playPath);
+  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
 
   return (
     <>
@@ -322,234 +428,253 @@ function MatchDetailPanel({ match, onClose, onPlay }: {
       </AnimatePresence>
 
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-t-3xl"
+        style={{
+          background: 'linear-gradient(180deg, #0a0e27 0%, #050816 100%)',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <motion.div
-          initial={{ y: '100%' }}
-          animate={{ y: 0 }}
-          exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-t-3xl"
-          style={{
-            background: 'linear-gradient(180deg, #0a0e27 0%, #050816 100%)',
-            borderTop: '1px solid rgba(255,255,255,0.1)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Handle */}
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+
+        {/* Header */}
+        <div className="px-5 pt-2 pb-4">
+          <div className="flex items-center justify-between mb-4">
+            <StatusBadge status={match.status} size="md" />
+            <button onClick={onClose} className="p-2 rounded-full transition-colors hover:bg-white/10">
+              <X size={18} style={{ color: '#8899AA' }} />
+            </button>
           </div>
 
-          {/* Header */}
-          <div className="px-5 pt-2 pb-4">
-            <div className="flex items-center justify-between mb-4">
-              <StatusBadge status={match.status} size="md" minute={match.minute} />
-              <button onClick={onClose} className="p-2 rounded-full transition-colors hover:bg-white/10">
-                <X size={18} style={{ color: '#8899AA' }} />
-              </button>
+          {/* Teams & Score */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col items-center gap-2 flex-1">
+              <TeamLogo src={match.homeLogo} name={match.homeTeam} size="lg" />
+              <span className="text-sm font-bold text-center text-white">{match.homeTeam}</span>
             </div>
 
-            {/* Teams & Score */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-col items-center gap-2 flex-1">
-                <TeamLogo src={match.homeLogo} name={match.homeTeam} size="lg" />
-                <span className="text-sm font-bold text-center text-white">{match.homeTeam}</span>
+            <div className="flex flex-col items-center gap-2 flex-shrink-0">
+              <div className="text-4xl font-black text-white tabular-nums tracking-tight">
+                {match.homeScore} <span style={{ color: '#8899AA' }} className="text-2xl">:</span> {match.awayScore}
               </div>
-
-              <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                <div className="text-4xl font-black text-white tabular-nums tracking-tight">
-                  {match.homeScore} <span style={{ color: '#8899AA' }} className="text-2xl">:</span> {match.awayScore}
-                </div>
-                {match.league && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: '#8899AA' }}>
-                    {match.league}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col items-center gap-2 flex-1">
-                <TeamLogo src={match.awayLogo} name={match.awayTeam} size="lg" />
-                <span className="text-sm font-bold text-center text-white">{match.awayTeam}</span>
-              </div>
-            </div>
-
-            {/* Match Info */}
-            <div className="flex items-center justify-center gap-4 mt-4 text-[10px]" style={{ color: '#8899AA' }}>
-              {match.matchRound && <span className="flex items-center gap-1"><Trophy size={10} /> {match.matchRound}</span>}
-              {match.startTime && (
-                <span className="flex items-center gap-1">
-                  <Calendar size={10} />
-                  {formatMatchTime(match.startTime)}
+              {match.league && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: '#8899AA' }}>
+                  {match.league}
                 </span>
               )}
             </div>
+
+            <div className="flex flex-col items-center gap-2 flex-1">
+              <TeamLogo src={match.awayLogo} name={match.awayTeam} size="lg" />
+              <span className="text-sm font-bold text-center text-white">{match.awayTeam}</span>
+            </div>
           </div>
 
-          {/* Watch Button */}
-          {canPlay && (
-            <div className="px-5 pb-4">
-              <motion.button
-                onClick={() => onPlay(match)}
-                whileTap={{ scale: 0.97 }}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold"
-                style={{
-                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                  color: 'white',
-                  boxShadow: '0 8px 32px rgba(239,68,68,0.35), 0 0 0 1px rgba(239,68,68,0.3)',
-                }}
-              >
-                <Play size={16} className="fill-current" />
-                Watch Live Stream
-              </motion.button>
-            </div>
-          )}
+          {/* Match Info */}
+          <div className="flex items-center justify-center gap-4 mt-4 text-[10px]" style={{ color: '#8899AA' }}>
+            {match.venue && <span className="flex items-center gap-1"><Flag size={10} /> {match.venue}</span>}
+            {match.referee && <span className="flex items-center gap-1"><Users size={10} /> {match.referee}</span>}
+            {match.startTime && (
+              <span className="flex items-center gap-1">
+                <Calendar size={10} />
+                {formatMatchTime(match.startTime)}
+              </span>
+            )}
+          </div>
+        </div>
 
-          {/* Stream Channels */}
-          {match.streams.length > 0 && (
-            <div className="px-5 pb-4">
-              <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
-                  <Monitor size={12} /> Available Streams
-                </h4>
-                <div className="flex gap-2 flex-wrap">
-                  {match.streams.map((s, i) => (
-                    <motion.button
-                      key={i}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => onPlay({ ...match, streams: [s] })}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.08))',
-                        border: '1px solid rgba(0,212,255,0.3)',
-                        color: '#22D3EE',
-                      }}
-                    >
-                      <Play size={10} className="fill-current" />
-                      {s.name}
-                    </motion.button>
-                  ))}
-                </div>
+        {/* Watch Button */}
+        {canPlay && (
+          <div className="px-5 pb-4">
+            <motion.button
+              onClick={() => onPlay(match)}
+              whileTap={{ scale: 0.97 }}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold"
+              style={{
+                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                color: 'white',
+                boxShadow: '0 8px 32px rgba(239,68,68,0.35), 0 0 0 1px rgba(239,68,68,0.3)',
+              }}
+            >
+              <Play size={16} className="fill-current" />
+              Watch Live Stream
+            </motion.button>
+          </div>
+        )}
+
+        {/* Period Scores */}
+        {match.periodScores && match.periodScores.length > 0 && (
+          <div className="px-5 pb-4">
+            <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h4 className="text-xs font-bold mb-3 flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+                <BarChart3 size={12} /> Period Scores
+              </h4>
+              <div className="grid grid-cols-7 gap-2">
+                {match.periodScores.map((ps, i) => (
+                  <div key={i} className="text-center">
+                    <div className="text-[9px] mb-1" style={{ color: '#8899AA' }}>{ps.name}</div>
+                    <div className="text-xs font-bold text-white">{ps.home}-{ps.away}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Highlights */}
-          {(match.highlights ?? []).length > 0 && (
-            <div className="px-5 pb-4">
-              <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
-                  <Film size={12} /> Highlights ({(match.highlights ?? []).length})
-                </h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                  {match.highlights.map((h, i) => (
-                    <motion.button
-                      key={h.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      onClick={() => setVideoModal({ title: h.title, url: h.url })}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
-                    >
-                      {h.cover ? (
-                        <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                          <img src={h.cover} alt="" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
-                            <Play size={14} className="text-white fill-current" />
-                          </div>
-                          {h.duration !== '0' && (
-                            <span className="absolute bottom-0.5 right-0.5 text-[9px] font-bold px-1 rounded" style={{ background: 'rgba(0,0,0,0.7)', color: '#fff' }}>
-                              {formatDuration(h.duration)}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                          <Film size={16} style={{ color: '#8899AA' }} />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{h.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {h.views !== '0' && (
-                            <span className="text-[10px]" style={{ color: '#8899AA' }}>{formatViews(h.views)} views</span>
-                          )}
-                        </div>
-                      </div>
-                      <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
+        {/* Statistics */}
+        {match.stats && (
+          <div className="px-5 pb-4">
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+                <TrendingUp size={12} /> Match Statistics
+              </h4>
+              {match.stats.possession && <StatBar label="Possession %" values={match.stats.possession} colors={['#00D4FF', '#8B5CF6']} />}
+              {match.stats.shots && <StatBar label="Shots" values={match.stats.shots} />}
+              {match.stats.shotsOnTarget && <StatBar label="Shots on Target" values={match.stats.shotsOnTarget} colors={['#22c55e', '#16a34a']} />}
+              {match.stats.corners && <StatBar label="Corners" values={match.stats.corners} colors={['#f59e0b', '#d97706']} />}
+              {match.stats.fouls && <StatBar label="Fouls" values={match.stats.fouls} colors={['#ef4444', '#dc2626']} />}
+              {match.stats.yellowCards && <StatBar label="Yellow Cards" values={match.stats.yellowCards} colors={['#eab308', '#ca8a04']} />}
+              {match.stats.offsides && <StatBar label="Offsides" values={match.stats.offsides} colors={['#6b7280', '#4b5563']} />}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Full Match Replays */}
-          {(match.replays ?? []).length > 0 && (
-            <div className="px-5 pb-6">
-              <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
-                  <Video size={12} /> Full Match Replays ({(match.replays ?? []).length})
-                </h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                  {match.replays.map((r, i) => (
-                    <motion.button
-                      key={r.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      onClick={() => setVideoModal({ title: r.title, url: r.url })}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
-                    >
-                      {r.cover ? (
-                        <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                          <img src={r.cover} alt="" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
-                            <Play size={14} className="text-white fill-current" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                          <Video size={16} style={{ color: '#8899AA' }} />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{r.title}</p>
-                      </div>
-                      <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Football Stats Overlay */}
+        {/* Events */}
+        {match.events && match.events.length > 0 && (
           <div className="px-5 pb-6">
-            <MatchStatsOverlay
-              matchId={match.id}
-              homeTeamName={match.homeTeam}
-              awayTeamName={match.awayTeam}
-              isLive={match.status === 'LIVE'}
-            />
+            <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <MatchEventTimeline events={match.events} />
+            </div>
           </div>
-        </motion.div>
+        )}
+
+        {/* Highlights */}
+        {(match.highlights ?? []).length > 0 && (
+          <div className="px-5 pb-4">
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+                <Film size={12} /> Highlights ({(match.highlights ?? []).length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                {(match.highlights ?? []).map((h, i) => (
+                  <motion.button
+                    key={h.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => setVideoModal({ title: h.title, url: h.url })}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
+                  >
+                    {h.cover ? (
+                      <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={h.cover} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
+                          <Play size={14} className="text-white fill-current" />
+                        </div>
+                        {h.duration !== '0' && (
+                          <span className="absolute bottom-0.5 right-0.5 text-[9px] font-bold px-1 rounded" style={{ background: 'rgba(0,0,0,0.7)', color: '#fff' }}>
+                            {formatDuration(h.duration)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <Film size={16} style={{ color: '#8899AA' }} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{h.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {h.views !== '0' && (
+                          <span className="text-[10px]" style={{ color: '#8899AA' }}>{formatViews(h.views)} views</span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Match Replays */}
+        {(match.replays ?? []).length > 0 && (
+          <div className="px-5 pb-6">
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
+                <Video size={12} /> Full Match Replays ({(match.replays ?? []).length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                {(match.replays ?? []).map((r, i) => (
+                  <motion.button
+                    key={r.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => setVideoModal({ title: r.title, url: r.url })}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
+                  >
+                    {r.cover ? (
+                      <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={r.cover} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
+                          <Play size={14} className="text-white fill-current" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <Video size={16} style={{ color: '#8899AA' }} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{r.title}</p>
+                    </div>
+                    <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Football Stats Overlay */}
+        <div className="px-5 pb-6">
+          <MatchStatsOverlay
+            matchId={match.id}
+            homeTeamName={match.homeTeam}
+            awayTeamName={match.awayTeam}
+            isLive={match.status === 'LIVE'}
+          />
+        </div>
       </motion.div>
+    </motion.div>
     </>
   );
 }
 
 // ─── Component: HeroMatch ────────────────────────────────────────────────────
-function HeroMatch({ match, onPlay, onViewDetails }: {
+function HeroMatch({ match, onPlay, onViewDetails, source }: {
   match: Match;
   onPlay: (match: Match) => void;
   onViewDetails: (match: Match) => void;
+  source: 'local' | 'english';
 }) {
-  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || match.playPath);
+  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
 
   return (
     <motion.div
@@ -562,6 +687,7 @@ function HeroMatch({ match, onPlay, onViewDetails }: {
         boxShadow: '0 8px 48px rgba(239,68,68,0.15), inset 0 1px 0 rgba(255,255,255,0.05)',
       }}
     >
+      {/* Glow effect */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full opacity-20 blur-3xl pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(239,68,68,0.5), transparent 70%)' }}
       />
@@ -570,14 +696,14 @@ function HeroMatch({ match, onPlay, onViewDetails }: {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <StatusBadge status={match.status} size="md" minute={match.minute} />
+            <StatusBadge status={match.status} size="md" />
             {match.league && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: '#8899AA' }}>
                 {match.league}
               </span>
             )}
           </div>
-          {match.matchRound && <span className="text-[10px]" style={{ color: '#8899AA' }}>{match.matchRound}</span>}
+          {match.round && <span className="text-[10px]" style={{ color: '#8899AA' }}>{match.round}</span>}
         </div>
 
         {/* Teams & Score */}
@@ -598,6 +724,13 @@ function HeroMatch({ match, onPlay, onViewDetails }: {
             <span className="text-sm font-bold text-center text-white leading-tight">{match.awayTeam}</span>
           </div>
         </div>
+
+        {/* Quick Stats Preview */}
+        {match.stats?.possession && (
+          <div className="mb-4 px-2">
+            <StatBar label="Possession" values={match.stats.possession} colors={['#00D4FF', '#8B5CF6']} />
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-2">
@@ -635,14 +768,15 @@ function HeroMatch({ match, onPlay, onViewDetails }: {
   );
 }
 
-// ─── Component: MatchCard ────────────────────────────────────────────────────
-function MatchCard({ match, onPlay, onViewDetails, index }: {
+// ─── Component: MatchCard (Improved) ─────────────────────────────────────────
+function MatchCard({ match, onPlay, onViewDetails, source, index }: {
   match: Match;
   onPlay: (match: Match) => void;
   onViewDetails: (match: Match) => void;
+  source: 'local' | 'english';
   index: number;
 }) {
-  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || match.playPath);
+  const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
   const hasHighlights = (match.highlights ?? []).length > 0;
   const hasReplays = (match.replays ?? []).length > 0;
 
@@ -667,17 +801,18 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
           : '0 2px 8px rgba(0,0,0,0.2)',
       }}
     >
+      {/* Hover glow */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
         style={{ background: 'linear-gradient(135deg, rgba(0,212,255,0.03), transparent 60%)' }}
       />
 
-      {/* League & Status */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] truncate font-semibold" style={{ color: '#8899AA' }}>
-          {match.league} {match.matchRound ? `· ${match.matchRound}` : ''}
-        </p>
-        <StatusBadge status={match.status} minute={match.minute} />
-      </div>
+      {/* League */}
+      {match.league && (
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] truncate font-semibold" style={{ color: '#8899AA' }}>{match.league}</p>
+          <StatusBadge status={match.status} />
+        </div>
+      )}
 
       {/* Teams & Score */}
       <div className="flex items-center justify-between gap-3">
@@ -687,6 +822,7 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
         </div>
 
         <div className="flex flex-col items-center gap-1 flex-shrink-0 px-2">
+          {!match.league && <StatusBadge status={match.status} />}
           {match.status !== 'UPCOMING' ? (
             <p className="text-2xl font-black text-white tabular-nums">
               {match.homeScore} <span style={{ color: 'rgba(255,255,255,0.25)' }} className="text-lg">:</span> {match.awayScore}
@@ -696,6 +832,7 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
               {formatMatchTime(match.startTime)}
             </p>
           )}
+          {match.round && <p className="text-[9px]" style={{ color: '#8899AA' }}>{match.round}</p>}
         </div>
 
         <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
@@ -704,7 +841,30 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
         </div>
       </div>
 
-      {/* Badges Row */}
+      {/* Quick Stats Row */}
+      {match.stats && (
+        <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <div className="flex items-center justify-center gap-4 text-[10px]" style={{ color: '#8899AA' }}>
+            {match.stats.possession && (
+              <span className="flex items-center gap-1">
+                <Target size={9} /> {match.stats.possession[0]}%-{match.stats.possession[1]}%
+              </span>
+            )}
+            {match.stats.shots && (
+              <span className="flex items-center gap-1">
+                <Swords size={9} /> {match.stats.shots[0]}-{match.stats.shots[1]}
+              </span>
+            )}
+            {match.stats.corners && (
+              <span className="flex items-center gap-1">
+                <Flag size={9} /> {match.stats.corners[0]}-{match.stats.corners[1]}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Replay/Highlight Badges */}
       <div className="mt-3 flex items-center justify-center gap-2">
         {hasHighlights && (
           <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,212,255,0.1)', color: '#22D3EE' }}>
@@ -746,24 +906,35 @@ function MatchCard({ match, onPlay, onViewDetails, index }: {
 
 // ─── Component: LeagueFilter ─────────────────────────────────────────────────
 function LeagueFilter({ leagues, active, onChange }: {
-  leagues: League[];
-  active: string;
-  onChange: (leagueId: string) => void;
+  leagues: string[];
+  active: string | null;
+  onChange: (league: string | null) => void;
 }) {
   return (
     <div className="flex gap-2 px-4 mb-4 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        onClick={() => onChange(null)}
+        className="flex-shrink-0 px-4 py-1.5 rounded-xl text-[11px] font-bold transition-all"
+        style={active === null ? {
+          background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+          border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
+        } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#8899AA' }}
+      >
+        All Leagues
+      </motion.button>
       {leagues.map(league => (
         <motion.button
-          key={league.id}
+          key={league}
           whileTap={{ scale: 0.95 }}
-          onClick={() => onChange(league.id)}
+          onClick={() => onChange(active === league ? null : league)}
           className="flex-shrink-0 px-4 py-1.5 rounded-xl text-[11px] font-bold transition-all"
-          style={active === league.id ? {
+          style={active === league ? {
             background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
             border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
           } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#8899AA' }}
         >
-          {league.name}
+          {league}
         </motion.button>
       ))}
     </div>
@@ -818,7 +989,7 @@ function StreamSelector({
   activeIndex,
   onSelect,
 }: {
-  streams: { name: string }[];
+  streams: { label: string; hd?: number }[];
   activeIndex: number;
   onSelect: (index: number) => void;
 }) {
@@ -837,7 +1008,7 @@ function StreamSelector({
                 key={i}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => onSelect(i)}
-                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-all"
                 style={isActive ? {
                   background: 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(0,212,255,0.15))',
                   border: '1.5px solid rgba(0,212,255,0.6)',
@@ -849,7 +1020,55 @@ function StreamSelector({
                   color: 'var(--text-secondary)',
                 }}
               >
-                {s.name}
+                {i + 1}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared: SourceSelector ──────────────────────────────────────────────────
+function SourceSelector({
+  sources,
+  activeSource,
+  onSelect,
+}: {
+  sources: string[];
+  activeSource: string;
+  onSelect: (source: string) => void;
+}) {
+  return (
+    <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Monitor size={12} style={{ color: 'var(--accent-cyan)' }} />
+          <span className="text-[10px] font-bold tracking-wider" style={{ color: 'var(--text-secondary)' }}>SOURCE</span>
+        </div>
+        <div className="flex gap-2">
+          {sources.map((src) => {
+            const isActive = src === activeSource;
+            return (
+              <motion.button
+                key={src}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onSelect(src)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all"
+                style={isActive ? {
+                  background: 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(0,212,255,0.15))',
+                  border: '1.5px solid rgba(0,212,255,0.6)',
+                  color: '#22D3EE',
+                  boxShadow: '0 0 12px rgba(0,212,255,0.2)',
+                } : {
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {src}
+                {isActive && <CheckCircle2 size={12} />}
               </motion.button>
             );
           })}
@@ -862,7 +1081,7 @@ function StreamSelector({
 // ─── Shared: MatchInfoBar ────────────────────────────────────────────────────
 function MatchInfoBar({ match }: { match: Match }) {
   const statusDisplay = match.status === 'HALF_TIME' ? 'HT'
-    : match.status === 'LIVE' ? (match.minute || 'LIVE')
+    : match.status === 'LIVE' ? 'LIVE'
     : match.status === 'UPCOMING' ? 'UPCOMING'
     : 'FT';
 
@@ -873,9 +1092,10 @@ function MatchInfoBar({ match }: { match: Match }) {
 
   return (
     <div className="px-4 py-4">
+      {/* Sport & Status */}
       <div className="flex items-center justify-center gap-2 mb-4">
         <span className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--text-secondary)' }}>
-          {match.league?.toUpperCase() || 'SPORTS'}
+          {match.league?.toUpperCase() || 'FOOTBALL'}
         </span>
         <span style={{ color: 'var(--text-muted)' }}>·</span>
         <div className="flex items-center gap-1.5">
@@ -891,6 +1111,7 @@ function MatchInfoBar({ match }: { match: Match }) {
         </div>
       </div>
 
+      {/* Home Team */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
           <TeamLogo src={match.homeLogo} name={match.homeTeam} size="md" />
@@ -899,12 +1120,14 @@ function MatchInfoBar({ match }: { match: Match }) {
         <span className="text-3xl font-black text-white tabular-nums">{match.homeScore}</span>
       </div>
 
+      {/* Divider */}
       <div className="flex items-center gap-3 my-2">
         <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.08))' }} />
         <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>VS</span>
         <div className="flex-1 h-px" style={{ background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.08))' }} />
       </div>
 
+      {/* Away Team */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
           <TeamLogo src={match.awayLogo} name={match.awayTeam} size="md" />
@@ -932,6 +1155,7 @@ function VideoPlayerCore({
 }) {
   return (
     <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000' }}>
+      {/* Loading State */}
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3">
           <div className="relative">
@@ -946,6 +1170,7 @@ function VideoPlayerCore({
         </div>
       )}
 
+      {/* Error State */}
       {error && !loading ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
           <WifiOff className="w-12 h-12 mb-3" style={{ color: '#ef4444' }} />
@@ -978,6 +1203,7 @@ function VideoPlayerCore({
         />
       )}
 
+      {/* LIVE Badge */}
       <div className="absolute top-3 left-3 z-20">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
           style={{ background: 'rgba(239,68,68,0.9)', backdropFilter: 'blur(8px)' }}>
@@ -989,6 +1215,7 @@ function VideoPlayerCore({
         </div>
       </div>
 
+      {/* HD Badge */}
       <div className="absolute top-3 right-3 z-20">
         <div className="px-2 py-0.5 rounded-md"
           style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}>
@@ -1088,8 +1315,65 @@ function LandscapeHint() {
   );
 }
 
-// ─── Sports Player ───────────────────────────────────────────────────────────
-function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
+// ─── Utility: Detect if stream needs iframe ──────────────────────────────────
+function needsIframe(url: string): boolean {
+  if (!url) return false;
+  // Direct m3u8 or media files — no iframe needed
+  if (url.match(/\.m3u8(?:\?|$)/i) && !url.includes('.html')) return false;
+  if (url.match(/\.(mp4|webm|ts)(?:\?|$)/i)) return false;
+  // HTTP non-SSL sportsteam368 usually serves HTML players
+  if (url.includes('sportsteam368.com')) return true;
+  // Any URL with .html in it
+  if (url.includes('.html')) return true;
+  // Any URL with player/embed parameters but no m3u8 extension
+  if (url.match(/[?&](?:player|embed|iframe|play)/i) && !url.match(/\.m3u8(?:\?|$)/i)) return true;
+  return false;
+}
+
+// ─── Component: IframePlayer ─────────────────────────────────────────────────
+function IframePlayer({ url, title }: { url: string; title?: string }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use the backend iframe player endpoint for better sandboxing
+  const iframeSrc = url.startsWith('http')
+    ? `${API_BASE}/api/sports-v2/iframe-player?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title || 'Live Stream')}`
+    : url;
+
+  return (
+    <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000' }}>
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3">
+          <div className="relative">
+            <Loader2 className="w-10 h-10 animate-spin" style={{ color: '#22D3EE' }} />
+          </div>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Loading external player…
+          </p>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
+          <WifiOff className="w-12 h-12 mb-3" style={{ color: '#ef4444' }} />
+          <p className="text-white font-bold text-base text-center">{error}</p>
+        </div>
+      )}
+      <iframe
+        src={iframeSrc}
+        className="w-full h-full border-0"
+        style={{ opacity: loading ? 0 : 1 }}
+        sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+        allow="fullscreen; autoplay; encrypted-media"
+        onLoad={() => setLoading(false)}
+        onError={() => { setLoading(false); setError('Failed to load player'); }}
+        title={title || 'Live Stream'}
+      />
+    </div>
+  );
+}
+
+// ─── Local Sports Player ─────────────────────────────────────────────────────
+function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1100,80 +1384,103 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeSource, setActiveSource] = useState('Admin');
+  const [streamType, setStreamType] = useState<'hls' | 'iframe'>('hls');
 
-  // Build stream list from match data
+  const sourceOptions = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
+
+  // Test streams and rank them
   useEffect(() => {
-    const allStreams: Stream[] = [];
-
-    // Add direct playPath if available
-    if (match.playPath) {
-      allStreams.push({
-        name: 'Primary Stream',
-        url: match.playPath,
-        type: 'hls',
-        quality: 'HD',
-      });
-    }
-
-    // Add playSource streams
-    match.streams.forEach((s, i) => {
-      allStreams.push({
-        ...s,
-        name: s.name || `Channel ${i + 1}`,
-      });
-    });
-
-    if (allStreams.length === 0) {
+    if (!match.streams.length) {
       setTesting(false);
       setError('No streams available');
       return;
     }
-
-    setRankedStreams(allStreams);
-
-    // Test streams
     setTesting(true);
     fetch(`${API_BASE}/api/sports-v2/test-streams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streams: allStreams }),
+      body: JSON.stringify({ streams: match.streams }),
     })
       .then(r => r.json())
       .then(data => {
-        const sorted: Stream[] = data.streams || allStreams;
+        const sorted: Stream[] = data.streams || match.streams;
         setRankedStreams(sorted);
         const best = sorted.find((s: Stream) => s.ok !== false) || sorted[0];
         setActiveStream(best);
       })
       .catch(() => {
-        setRankedStreams(allStreams);
-        setActiveStream(allStreams[0]);
+        setRankedStreams(match.streams);
+        setActiveStream(match.streams[0]);
       })
       .finally(() => setTesting(false));
   }, [match.id]);
 
-  // Load active stream into HLS
+  // Determine stream type and load
   useEffect(() => {
-    if (!activeStream || !videoRef.current) return;
+    if (!activeStream) return;
     setLoading(true);
     setError(null);
 
-    const proxyUrl = activeStream.url;
+    const useIframe = needsIframe(activeStream.url);
+    setStreamType(useIframe ? 'iframe' : 'hls');
+
+    if (useIframe) {
+      // Iframe streams load themselves, just stop video if any
+      if (videoRef.current) {
+        videoRef.current.src = '';
+        videoRef.current.pause();
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      setLoading(false);
+      return;
+    }
+
+    // HLS stream loading
+    if (!videoRef.current) return;
+    const proxyUrl = `${API_BASE}/api/sports-v2/stream-proxy?url=${encodeURIComponent(activeStream.url)}`;
     const video = videoRef.current;
 
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
     if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        maxBufferLength: 30,
+        manifestLoadingTimeOut: 20000,
+        fragLoadingTimeOut: 20000,
+        levelLoadingTimeOut: 20000,
+      });
       hlsRef.current = hls;
       hls.loadSource(proxyUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => { setLoading(false); video.play().catch(() => {}); });
-      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) setError('Stream unavailable — try another'); });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false);
+        video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        console.warn('[HLS] Error:', data);
+        if (data.fatal) {
+          setLoading(false);
+          setError('Stream unavailable \u2014 try another channel');
+          // Auto-try next stream
+          const idx = rankedStreams.findIndex(s => s.url === activeStream.url);
+          if (idx >= 0 && idx < rankedStreams.length - 1) {
+            setTimeout(() => setActiveStream(rankedStreams[idx + 1]), 500);
+          }
+        }
+      });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = proxyUrl;
-      video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); });
-      video.addEventListener('error', () => setError('Stream unavailable'));
+      video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); }, { once: true });
+      video.addEventListener('error', () => { setLoading(false); setError('Stream unavailable'); }, { once: true });
+    } else {
+      setLoading(false);
+      setError('HLS not supported in this browser');
     }
 
     return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
@@ -1201,6 +1508,7 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
       className="fixed inset-0 z-50 flex flex-col"
       style={{ background: 'var(--bg)' }}
     >
+      {/* Header */}
       <PlayerHeader
         match={match}
         onClose={onClose}
@@ -1208,36 +1516,53 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
         onToggleFullscreen={toggleFullscreen}
       />
 
+      {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        {/* Landscape Hint */}
         <LandscapeHint />
 
+        {/* Video Player Container */}
         <div className="px-4 mt-3">
           <div className="rounded-2xl overflow-hidden"
             style={{ border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-            <VideoPlayerCore
-              videoRef={videoRef}
-              loading={testing || loading}
-              error={error}
-              rankedStreams={rankedStreams}
-              onRetry={() => {
-                setError(null);
-                setLoading(true);
-                if (activeStream) {
-                  const url = activeStream.url;
-                  setActiveStream(null);
-                  setTimeout(() => setActiveStream(rankedStreams.find(s => s.url === url) || rankedStreams[0]), 50);
-                }
-              }}
-            />
+            {/* Video or Iframe Player */}
+            {streamType === 'iframe' && activeStream ? (
+              <IframePlayer url={activeStream.url} title={`${match.homeTeam} vs ${match.awayTeam}`} />
+            ) : (
+              <VideoPlayerCore
+                videoRef={videoRef}
+                loading={testing || loading}
+                error={error}
+                rankedStreams={rankedStreams}
+                onRetry={() => {
+                  setError(null);
+                  setLoading(true);
+                  if (activeStream) {
+                    const url = activeStream.url;
+                    setActiveStream(null);
+                    setTimeout(() => setActiveStream(rankedStreams.find(s => s.url === url) || rankedStreams[0]), 50);
+                  }
+                }}
+              />
+            )}
 
+            {/* Stream Selector */}
             {rankedStreams.length > 0 && (
               <StreamSelector
-                streams={rankedStreams.map((s) => ({ name: s.name }))}
+                streams={rankedStreams.map((s, i) => ({ label: i === 0 ? s.name : `Ch ${i + 1}` }))}
                 activeIndex={activeStreamIndex >= 0 ? activeStreamIndex : 0}
                 onSelect={(idx) => setActiveStream(rankedStreams[idx])}
               />
             )}
 
+            {/* Source Selector */}
+            <SourceSelector
+              sources={sourceOptions}
+              activeSource={activeSource}
+              onSelect={setActiveSource}
+            />
+
+            {/* Report Issue */}
             <div className="px-4 py-2.5 flex items-center gap-2"
               style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
               <AlertTriangle size={12} style={{ color: 'var(--text-muted)' }} />
@@ -1246,8 +1571,10 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
               </span>
             </div>
 
+            {/* Match Info */}
             <MatchInfoBar match={match} />
 
+            {/* Football Stats Overlay */}
             {match.status === 'LIVE' || match.status === 'HALF_TIME' || match.status === 'FINISHED' ? (
               <div className="px-4 pb-4 pt-2">
                 <MatchStatsOverlay
@@ -1261,56 +1588,264 @@ function SportsPlayer({ match, onClose }: { match: Match; onClose: () => void })
           </div>
         </div>
 
+        {/* Extra bottom padding */}
         <div className="h-6" />
       </div>
     </motion.div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN SportsPage
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Embedhd Player ──────────────────────────────────────────────────────────
+function EmbedhdPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [channels, setChannels] = useState<{ hd: number; label: string }[]>([]);
+  const [activeChannel, setActiveChannel] = useState(0);
+  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeSource, setActiveSource] = useState('Admin');
+
+  const sourceOptions = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
+
+  useEffect(() => {
+    if (match.embedhdStreams && match.embedhdStreams.length > 0) {
+      const chs = match.embedhdStreams.map((s, i) => ({ hd: s.hd, label: i === 0 ? 'Primary' : `Ch ${i + 1}` }));
+      setChannels(chs);
+    }
+  }, [match.embedhdStreams]);
+
+  useEffect(() => {
+    if (!match.embedhdStreams || match.embedhdStreams.length === 0 || !match.embedhdStreams[activeChannel]) {
+      setResolving(false);
+      return;
+    }
+    setResolving(true);
+    fetch(`${API_BASE}/api/embedhd/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hd: match.embedhdStreams[activeChannel].hd }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.success && data.streamUrl) setProxyUrl(data.streamUrl); else setError(data.error || 'Could not resolve stream'); })
+      .catch(() => setError('Failed to resolve stream'))
+      .finally(() => setResolving(false));
+  }, [match.id, activeChannel]);
+
+  useEffect(() => {
+    if (!proxyUrl || !videoRef.current) return;
+    setLoading(true);
+    setError(null);
+    const video = videoRef.current;
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      hlsRef.current = hls;
+      hls.loadSource(proxyUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { setLoading(false); video.play().catch(() => {}); });
+      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) setError('Stream unavailable'); });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = proxyUrl;
+      video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); });
+      video.addEventListener('error', () => setError('Stream unavailable'));
+    }
+    return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
+  }, [proxyUrl]);
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) { containerRef.current.requestFullscreen().catch(() => {}); setIsFullscreen(true); }
+    else { document.exitFullscreen().catch(() => {}); setIsFullscreen(false); }
+  };
+
+  const refreshStream = useCallback(() => {
+    setError(null);
+    setResolving(true);
+    setProxyUrl(null);
+    fetch(`${API_BASE}/api/embedhd/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hd: match.embedhdStreams?.[activeChannel]?.hd }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.success && data.streamUrl) setProxyUrl(data.streamUrl); else setError(data.error || 'Could not resolve stream'); })
+      .catch(() => setError('Failed to resolve stream'))
+      .finally(() => setResolving(false));
+  }, [match.embedhdStreams, activeChannel]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      ref={containerRef}
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: 'var(--bg)' }}
+    >
+      {/* Header */}
+      <PlayerHeader
+        match={match}
+        onClose={onClose}
+        onRefresh={refreshStream}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        {/* Landscape Hint */}
+        <LandscapeHint />
+
+        {/* Video Player Container */}
+        <div className="px-4 mt-3">
+          <div className="rounded-2xl overflow-hidden"
+            style={{ border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+            {/* Video - 16:9 centered */}
+            <VideoPlayerCore
+              videoRef={videoRef}
+              loading={resolving || loading}
+              error={error}
+              rankedStreams={channels}
+              onRetry={refreshStream}
+            />
+
+            {/* Stream Selector */}
+            {channels.length > 0 && (
+              <StreamSelector
+                streams={channels.map((ch) => ({ label: ch.label, hd: ch.hd }))}
+                activeIndex={activeChannel}
+                onSelect={setActiveChannel}
+              />
+            )}
+
+            {/* Source Selector */}
+            <SourceSelector
+              sources={sourceOptions}
+              activeSource={activeSource}
+              onSelect={setActiveSource}
+            />
+
+            {/* Report Issue */}
+            <div className="px-4 py-2.5 flex items-center gap-2"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <AlertTriangle size={12} style={{ color: 'var(--text-muted)' }} />
+              <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                Report stream issue
+              </span>
+            </div>
+
+            {/* Match Info */}
+            <MatchInfoBar match={match} />
+
+            {/* Football Stats Overlay */}
+            {match.status === 'LIVE' || match.status === 'HALF_TIME' || match.status === 'FINISHED' ? (
+              <div className="px-4 pb-4 pt-2">
+                <MatchStatsOverlay
+                  matchId={match.id}
+                  homeTeamName={match.homeTeam}
+                  awayTeamName={match.awayTeam}
+                  isLive={match.status === 'LIVE'}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Extra bottom padding */}
+        <div className="h-6" />
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Main SportsPage ─────────────────────────────────────────────────────────
 export default function SportsPage() {
+  const [sport, setSport] = useState('football');
   const [matches, setMatches] = useState<Match[]>([]);
-  const [leagues, setLeagues] = useState<League[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeMatch, setActiveMatch] = useState<Match | null>(null);
+  const [playerSource, setPlayerSource] = useState<'local' | 'english'>('local');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [selectedLeague, setSelectedLeague] = useState('0');
+  const [source, setSource] = useState<'local' | 'english'>('local');
+  const [selectedLeague, setSelectedLeague] = useState<string | null>(null);
   const [detailMatch, setDetailMatch] = useState<Match | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-
-  // Fetch leagues on mount
-  useEffect(() => {
-    fetch(`${API_BASE}/api/sports-v2/leagues`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.leagues) {
-          setLeagues(data.leagues);
-        }
-      })
-      .catch(() => {
-        // Fallback leagues
-        setLeagues([
-          { id: '0', name: 'All', localName: 'All' },
-          { id: '4186762757372631736', name: 'FIFA World Cup', localName: 'FIFA World Cup' },
-          { id: '1247297119346653536', name: 'NBA', localName: 'NBA' },
-        ]);
-      });
-  }, []);
 
   const fetchMatches = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/sports-v2/matches?leagueId=${selectedLeague}`);
-      if (!res.ok) throw new Error('Failed to fetch matches');
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'API error');
-
-      const raw = data.matches || [];
-      setMatches(raw);
+      if (source === 'english') {
+        const res = await fetch(`${API_BASE}/api/embedhd/matches`);
+        if (!res.ok) throw new Error('Failed to fetch matches');
+        const data = await res.json();
+        const raw = data.matches || [];
+        const normalized: Match[] = raw
+          .filter((m: any) => m.category === 'football' || m.category === 'soccer')
+          .map((m: any) => ({
+            id: String(m.id),
+            homeTeam: m.home || m.homeTeam || 'Home',
+            awayTeam: m.away || m.awayTeam || 'Away',
+            homeLogo: m.homeLogo || '',
+            awayLogo: m.awayLogo || '',
+            homeScore: m.homeScore || '-',
+            awayScore: m.awayScore || '-',
+            status: m.status || 'UNKNOWN',
+            streams: [],
+            embedhdStreams: m.streams || [],
+            startTime: m.time ? new Date(m.time).getTime() / 1000 : null,
+            league: m.league || null,
+            venue: m.venue || undefined,
+            stats: m.stats || undefined,
+          }));
+        setMatches(normalized);
+      } else {
+        const res = await fetch(`${API_BASE}/api/sports-v2/matches`);
+        if (!res.ok) throw new Error('Failed to fetch matches');
+        const data = await res.json();
+        const raw = data.matches || [];
+        const normalized: Match[] = raw.map((m: any) => ({
+          id: String(m.id),
+          homeTeam: m.homeTeam || 'Home',
+          awayTeam: m.awayTeam || 'Away',
+          homeLogo: m.homeTeamLogo || m.homeLogo || '',
+          awayLogo: m.awayTeamLogo || m.awayLogo || '',
+          homeScore: String(m.homeScore ?? '-'),
+          awayScore: String(m.awayScore ?? '-'),
+          status: m.status || 'UNKNOWN',
+          streams: m.streams || [],
+          startTime: m.startTime ? new Date(m.startTime).getTime() / 1000 : null,
+          league: m.league || null,
+          round: m.round || m.matchRound || undefined,
+          venue: m.venue || undefined,
+          referee: m.referee || undefined,
+          stats: m.stats || undefined,
+          events: m.events || undefined,
+          sportType: m.sport_type || m.sportType || 'football',
+          replays: (m.replays || []).map((r: any, idx: number) => ({
+            id: r.id || String(idx),
+            title: r.title || `Replay ${idx + 1}`,
+            url: r.url || r.path || '',
+            cover: r.cover || r.coverUrl || '',
+            duration: r.duration || '0',
+          })),
+          highlights: (m.highlights || []).map((h: any, idx: number) => ({
+            id: h.id || String(idx),
+            title: h.title || `Highlight ${idx + 1}`,
+            url: h.url || h.path || '',
+            cover: h.cover || h.coverUrl || '',
+            duration: h.duration || '0',
+            views: h.views || h.viewCount || '0',
+          })),
+        }));
+        setMatches(normalized);
+      }
       setLastUpdated(new Date());
       setRetryCount(0);
     } catch (e: any) {
@@ -1319,27 +1854,62 @@ export default function SportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedLeague]);
+  }, [sport, source]);
 
+  // Initial fetch
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
+
+  // Polling with visibility awareness — ref-based to avoid stale closures
   useEffect(() => {
-    const t = setInterval(fetchMatches, 60000);
-    return () => clearInterval(t);
+    const intervalMs = 30000; // 30 seconds for more responsive live updates
+    let t = setInterval(fetchMatches, intervalMs);
+
+    const onVisibility = () => {
+      if (!document.hidden) {
+        // Tab became visible — fetch fresh data immediately
+        fetchMatches();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [fetchMatches]);
 
   const handlePlay = useCallback((match: Match) => {
     setActiveMatch(match);
-  }, []);
+    setPlayerSource(source);
+  }, [source]);
 
   const handleViewDetails = useCallback((match: Match) => {
-    // Always fetch full match details for finished matches to ensure replays/highlights are loaded
+    // For finished matches, always fetch full details to ensure replays/highlights are loaded
     if (match.status === 'FINISHED') {
       fetch(`${API_BASE}/api/sports-v2/match/${match.id}`)
         .then(r => r.json())
         .then(data => {
           if (data.success && data.match) {
-            // Merge fetched data with existing match to preserve any fields not returned by detail endpoint
-            setDetailMatch({ ...match, ...data.match });
+            const m = data.match;
+            const enriched: Match = {
+              ...match,
+              replays: (m.replays || []).map((r: any, idx: number) => ({
+                id: r.id || String(idx),
+                title: r.title || `Replay ${idx + 1}`,
+                url: r.url || r.path || '',
+                cover: r.cover || r.coverUrl || '',
+                duration: r.duration || '0',
+              })),
+              highlights: (m.highlights || []).map((h: any, idx: number) => ({
+                id: h.id || String(idx),
+                title: h.title || `Highlight ${idx + 1}`,
+                url: h.url || h.path || '',
+                cover: h.cover || h.coverUrl || '',
+                duration: h.duration || '0',
+                views: h.views || h.viewCount || '0',
+              })),
+            };
+            setDetailMatch(enriched);
           } else {
             setDetailMatch(match);
           }
@@ -1350,22 +1920,49 @@ export default function SportsPage() {
     }
   }, []);
 
-  const live = matches.filter(m => m.status === 'LIVE');
-  const upcoming = matches.filter(m => m.status === 'UPCOMING');
-  const finished = matches.filter(m => m.status === 'FINISHED');
+  // Filter matches by selected league, sort football first
+  const filteredMatches = useMemo(() => {
+    let filtered = matches;
+    if (selectedLeague) {
+      filtered = matches.filter(m => m.league === selectedLeague);
+    }
+    // Sort: football/soccer matches first within each status group
+    const statusOrder: Record<string, number> = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, UNKNOWN: 2, FINISHED: 3 };
+    const isFootball = (m: Match) => m.sportType === 'football' || m.sportType === 'soccer' ? 0 : 1;
+    return [...filtered].sort((a, b) => {
+      const statusDiff = (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+      if (statusDiff !== 0) return statusDiff;
+      return isFootball(a) - isFootball(b);
+    });
+  }, [matches, selectedLeague]);
+
+  // Get unique leagues
+  const leagues = useMemo(() => {
+    const leagueSet = new Set<string>();
+    matches.forEach(m => { if (m.league) leagueSet.add(m.league); });
+    return Array.from(leagueSet).sort();
+  }, [matches]);
+
+  const live = filteredMatches.filter(m => m.status === 'LIVE');
+  const upcoming = filteredMatches.filter(m => m.status === 'UPCOMING' || m.status === 'UNKNOWN');
+  const finished = filteredMatches.filter(m => !['LIVE', 'UPCOMING', 'UNKNOWN'].includes(m.status));
   const hasLive = live.length > 0;
 
   return (
     <div className="min-h-screen pb-24 max-w-2xl mx-auto relative" style={{ background: 'var(--bg, #050816)' }}>
       <AnimatePresence>
-        {activeMatch && (
-          <SportsPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
+        {activeMatch && playerSource === 'local' && (
+          <LocalSportsPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
+        )}
+        {activeMatch && playerSource === 'english' && (
+          <EmbedhdPlayer match={activeMatch} onClose={() => setActiveMatch(null)} />
         )}
         {detailMatch && (
           <MatchDetailPanel
             match={detailMatch}
             onClose={() => setDetailMatch(null)}
             onPlay={handlePlay}
+            source={source}
           />
         )}
       </AnimatePresence>
@@ -1401,13 +1998,70 @@ export default function SportsPage() {
         )}
       </div>
 
-      {/* League Filter */}
-      {leagues.length > 0 && (
-        <LeagueFilter
-          leagues={leagues}
-          active={selectedLeague}
-          onChange={setSelectedLeague}
-        />
+      {/* Source Toggle */}
+      <div className="flex gap-2 px-4 mb-3">
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => { setSource('local'); setSelectedLeague(null); }}
+          className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+          style={source === 'local' ? {
+            background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+            border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
+            boxShadow: '0 0 16px rgba(0,212,255,0.1)',
+          } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#8899AA' }}
+        >
+          <Shield size={12} /> All Sports
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => { setSource('english'); setSelectedLeague(null); }}
+          className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+          style={source === 'english' ? {
+            background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+            border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
+            boxShadow: '0 0 16px rgba(0,212,255,0.1)',
+          } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#8899AA' }}
+        >
+          <Star size={12} /> English Streams
+        </motion.button>
+      </div>
+
+      {/* Sport Tabs */}
+      {source === 'local' && (
+        <div className="flex gap-2 px-4 mb-4 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          {SPORTS.map(s => (
+            <motion.button
+              key={s.key}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setSport(s.key)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+              style={sport === s.key ? {
+                background: 'linear-gradient(135deg, #00D4FF22, #8B5CF622)',
+                border: '1px solid rgba(0,212,255,0.4)', color: '#00D4FF',
+                boxShadow: '0 0 16px rgba(0,212,255,0.1)',
+              } : {
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#8899AA',
+              }}
+            >
+              <span>{s.icon}</span> {s.label}
+            </motion.button>
+          ))}
+        </div>
+      )}
+
+      {/* English Info Bar */}
+      {source === 'english' && (
+        <div className="px-4 mb-4">
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
+            style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)' }}>
+            <AlertCircle size={14} style={{ color: '#00D4FF' }} />
+            <span className="text-xs" style={{ color: '#00D4FF' }}>
+              Showing football matches only — powered by embedhd.org
+            </span>
+          </div>
+        </div>
       )}
 
       {/* Content */}
@@ -1452,7 +2106,7 @@ export default function SportsPage() {
             )}
           </div>
         </motion.div>
-      ) : matches.length === 0 ? (
+      ) : filteredMatches.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1464,80 +2118,118 @@ export default function SportsPage() {
             </div>
             <p className="text-white font-bold text-lg mb-1">No matches found</p>
             <p className="text-sm" style={{ color: '#8899AA' }}>
-              Check back when games are scheduled
+              {selectedLeague ? `No matches in ${selectedLeague}` : source === 'english' ? 'No football matches available right now' : 'Check back when games are scheduled'}
             </p>
+            {selectedLeague && (
+              <motion.button
+                onClick={() => setSelectedLeague(null)}
+                whileTap={{ scale: 0.95 }}
+                className="mt-4 px-5 py-2 rounded-xl text-xs font-bold"
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#00D4FF', border: '1px solid rgba(0,212,255,0.3)' }}
+              >
+                Clear Filter
+              </motion.button>
+            )}
           </div>
         </motion.div>
       ) : (
         <div className="space-y-6">
+          {/* League Filter */}
+          {leagues.length > 1 && (
+            <LeagueFilter leagues={leagues} active={selectedLeague} onChange={setSelectedLeague} />
+          )}
+
           {/* Featured Live Match */}
-          {hasLive && (
+          {hasLive && !selectedLeague && (
             <HeroMatch
               match={live[0]}
               onPlay={handlePlay}
               onViewDetails={handleViewDetails}
+              source={source}
             />
           )}
 
           <div className="px-4 space-y-6">
             {/* Live Matches */}
-            {live.length > 1 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="relative flex h-2 w-2">
+            {live.length > (selectedLeague ? 0 : 1) && (
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(239,68,68,0.25)', background: 'linear-gradient(180deg, rgba(239,68,68,0.08) 0%, rgba(5,8,22,0.5) 100%)' }}>
+                {/* Red Section Header */}
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.25), rgba(220,38,38,0.15))', borderBottom: '1px solid rgba(239,68,68,0.25)' }}>
+                  <div className="relative flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
                   </div>
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    Live Now
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', color: '#ff6b6b' }}>
+                  <h2 className="text-sm font-black tracking-wide flex items-center gap-2" style={{ color: '#ff6b6b' }}>
+                    LIVE
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.2)', color: '#ff6b6b', border: '1px solid rgba(239,68,68,0.3)' }}>
                       {live.length}
                     </span>
                   </h2>
+                  <div className="flex-1" />
+                  <span className="text-[10px] font-semibold" style={{ color: 'rgba(239,68,68,0.6)' }}>Happening now</span>
                 </div>
-                <div className="grid grid-cols-1 gap-3">
-                  {live.slice(1).map((m, i) => (
-                    <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} index={i} />
+                <div className="p-3 grid grid-cols-1 gap-3">
+                  {live.slice(selectedLeague ? 0 : 1).map((m, i) => (
+                    <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} source={source} index={i} />
                   ))}
                 </div>
               </section>
+            )}
+
+            {/* Spacer between sections */}
+            {live.length > (selectedLeague ? 0 : 1) && upcoming.length > 0 && (
+              <div className="h-4" />
             )}
 
             {/* Upcoming */}
             {upcoming.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <Clock size={14} style={{ color: '#f0c040' }} />
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    Upcoming
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(234,179,8,0.1)', color: '#f0c040' }}>
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(234,179,8,0.2)', background: 'linear-gradient(180deg, rgba(234,179,8,0.06) 0%, rgba(5,8,22,0.5) 100%)' }}>
+                {/* Yellow Section Header */}
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(234,179,8,0.2), rgba(202,138,4,0.12))', borderBottom: '1px solid rgba(234,179,8,0.2)' }}>
+                  <Clock size={16} style={{ color: '#f0c040' }} />
+                  <h2 className="text-sm font-black tracking-wide flex items-center gap-2" style={{ color: '#f0c040' }}>
+                    UPCOMING
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#f0c040', border: '1px solid rgba(234,179,8,0.25)' }}>
                       {upcoming.length}
                     </span>
                   </h2>
+                  <div className="flex-1" />
+                  <span className="text-[10px] font-semibold" style={{ color: 'rgba(240,192,64,0.5)' }}>Starting soon</span>
                 </div>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="p-3 grid grid-cols-1 gap-3">
                   {upcoming.map((m, i) => (
-                    <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} index={i} />
+                    <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} source={source} index={i} />
                   ))}
                 </div>
               </section>
             )}
 
+            {/* Spacer between sections */}
+            {upcoming.length > 0 && finished.length > 0 && (
+              <div className="h-4" />
+            )}
+            {live.length > (selectedLeague ? 0 : 1) && upcoming.length === 0 && finished.length > 0 && (
+              <div className="h-4" />
+            )}
+
             {/* Finished */}
             {finished.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 size={14} style={{ color: '#8899AA' }} />
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    Finished
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(100,116,139,0.1)', color: '#8899AA' }}>
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(100,116,139,0.2)', background: 'linear-gradient(180deg, rgba(100,116,139,0.06) 0%, rgba(5,8,22,0.5) 100%)' }}>
+                {/* Grey Section Header */}
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(100,116,139,0.2), rgba(71,85,105,0.12))', borderBottom: '1px solid rgba(100,116,139,0.2)' }}>
+                  <CheckCircle2 size={16} style={{ color: '#94a3b8' }} />
+                  <h2 className="text-sm font-black tracking-wide flex items-center gap-2" style={{ color: '#94a3b8' }}>
+                    FINISHED
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.25)' }}>
                       {finished.length}
                     </span>
                   </h2>
+                  <div className="flex-1" />
+                  <span className="text-[10px] font-semibold" style={{ color: 'rgba(148,163,184,0.5)' }}>Full time</span>
                 </div>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="p-3 grid grid-cols-1 gap-3">
                   {finished.map((m, i) => (
-                    <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} index={i} />
+                    <MatchCard key={m.id} match={m} onPlay={handlePlay} onViewDetails={handleViewDetails} source={source} index={i} />
                   ))}
                 </div>
               </section>

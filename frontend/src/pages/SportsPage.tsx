@@ -1315,6 +1315,63 @@ function LandscapeHint() {
   );
 }
 
+// ─── Utility: Detect if stream needs iframe ──────────────────────────────────
+function needsIframe(url: string): boolean {
+  if (!url) return false;
+  // Direct m3u8 or media files — no iframe needed
+  if (url.match(/\.m3u8(?:\?|$)/i) && !url.includes('.html')) return false;
+  if (url.match(/\.(mp4|webm|ts)(?:\?|$)/i)) return false;
+  // HTTP non-SSL sportsteam368 usually serves HTML players
+  if (url.includes('sportsteam368.com')) return true;
+  // Any URL with .html in it
+  if (url.includes('.html')) return true;
+  // Any URL with player/embed parameters but no m3u8 extension
+  if (url.match(/[?&](?:player|embed|iframe|play)/i) && !url.match(/\.m3u8(?:\?|$)/i)) return true;
+  return false;
+}
+
+// ─── Component: IframePlayer ─────────────────────────────────────────────────
+function IframePlayer({ url, title }: { url: string; title?: string }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use the backend iframe player endpoint for better sandboxing
+  const iframeSrc = url.startsWith('http')
+    ? `${API_BASE}/api/sports-v2/iframe-player?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title || 'Live Stream')}`
+    : url;
+
+  return (
+    <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000' }}>
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3">
+          <div className="relative">
+            <Loader2 className="w-10 h-10 animate-spin" style={{ color: '#22D3EE' }} />
+          </div>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Loading external player…
+          </p>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
+          <WifiOff className="w-12 h-12 mb-3" style={{ color: '#ef4444' }} />
+          <p className="text-white font-bold text-base text-center">{error}</p>
+        </div>
+      )}
+      <iframe
+        src={iframeSrc}
+        className="w-full h-full border-0"
+        style={{ opacity: loading ? 0 : 1 }}
+        sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+        allow="fullscreen; autoplay; encrypted-media"
+        onLoad={() => setLoading(false)}
+        onError={() => { setLoading(false); setError('Failed to load player'); }}
+        title={title || 'Live Stream'}
+      />
+    </div>
+  );
+}
+
 // ─── Local Sports Player ─────────────────────────────────────────────────────
 function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1328,6 +1385,7 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeSource, setActiveSource] = useState('Admin');
+  const [streamType, setStreamType] = useState<'hls' | 'iframe'>('hls');
 
   const sourceOptions = ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
 
@@ -1358,26 +1416,73 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
       .finally(() => setTesting(false));
   }, [match.id]);
 
-  // Load active stream into HLS
+  // Determine stream type and load
   useEffect(() => {
-    if (!activeStream || !videoRef.current) return;
+    if (!activeStream) return;
     setLoading(true);
     setError(null);
+
+    const useIframe = needsIframe(activeStream.url);
+    setStreamType(useIframe ? 'iframe' : 'hls');
+
+    if (useIframe) {
+      // Iframe streams load themselves, just stop video if any
+      if (videoRef.current) {
+        videoRef.current.src = '';
+        videoRef.current.pause();
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      setLoading(false);
+      return;
+    }
+
+    // HLS stream loading
+    if (!videoRef.current) return;
     const proxyUrl = `${API_BASE}/api/sports-v2/stream-proxy?url=${encodeURIComponent(activeStream.url)}`;
     const video = videoRef.current;
+
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
     if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        maxBufferLength: 30,
+        manifestLoadingTimeOut: 20000,
+        fragLoadingTimeOut: 20000,
+        levelLoadingTimeOut: 20000,
+      });
       hlsRef.current = hls;
       hls.loadSource(proxyUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => { setLoading(false); video.play().catch(() => {}); });
-      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) setError('Stream unavailable \u2014 try another'); });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false);
+        video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        console.warn('[HLS] Error:', data);
+        if (data.fatal) {
+          setLoading(false);
+          setError('Stream unavailable \u2014 try another channel');
+          // Auto-try next stream
+          const idx = rankedStreams.findIndex(s => s.url === activeStream.url);
+          if (idx >= 0 && idx < rankedStreams.length - 1) {
+            setTimeout(() => setActiveStream(rankedStreams[idx + 1]), 500);
+          }
+        }
+      });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = proxyUrl;
-      video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); });
-      video.addEventListener('error', () => setError('Stream unavailable'));
+      video.addEventListener('loadedmetadata', () => { setLoading(false); video.play().catch(() => {}); }, { once: true });
+      video.addEventListener('error', () => { setLoading(false); setError('Stream unavailable'); }, { once: true });
+    } else {
+      setLoading(false);
+      setError('HLS not supported in this browser');
     }
+
     return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
   }, [activeStream?.url]);
 
@@ -1420,22 +1525,26 @@ function LocalSportsPlayer({ match, onClose }: { match: Match; onClose: () => vo
         <div className="px-4 mt-3">
           <div className="rounded-2xl overflow-hidden"
             style={{ border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-            {/* Video - 16:9 centered */}
-            <VideoPlayerCore
-              videoRef={videoRef}
-              loading={testing || loading}
-              error={error}
-              rankedStreams={rankedStreams}
-              onRetry={() => {
-                setError(null);
-                setLoading(true);
-                if (activeStream) {
-                  const url = activeStream.url;
-                  setActiveStream(null);
-                  setTimeout(() => setActiveStream(rankedStreams.find(s => s.url === url) || rankedStreams[0]), 50);
-                }
-              }}
-            />
+            {/* Video or Iframe Player */}
+            {streamType === 'iframe' && activeStream ? (
+              <IframePlayer url={activeStream.url} title={`${match.homeTeam} vs ${match.awayTeam}`} />
+            ) : (
+              <VideoPlayerCore
+                videoRef={videoRef}
+                loading={testing || loading}
+                error={error}
+                rankedStreams={rankedStreams}
+                onRetry={() => {
+                  setError(null);
+                  setLoading(true);
+                  if (activeStream) {
+                    const url = activeStream.url;
+                    setActiveStream(null);
+                    setTimeout(() => setActiveStream(rankedStreams.find(s => s.url === url) || rankedStreams[0]), 50);
+                  }
+                }}
+              />
+            )}
 
             {/* Stream Selector */}
             {rankedStreams.length > 0 && (
