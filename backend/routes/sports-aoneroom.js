@@ -43,6 +43,7 @@ const STREAM_HEADERS = {
 
 const STATUS_MAP = {
   'Live': 'LIVE',
+  'MatchIng': 'LIVE',
   'MatchEnded': 'FINISHED',
   'Upcoming': 'UPCOMING',
   'HalfTime': 'HALF_TIME',
@@ -57,12 +58,14 @@ const STATUS_LIVE_MAP = {
   2: 'HALF_TIME',
   3: 'FINISHED',
   'Living': 'LIVE',
+  'UnLive': 'UPCOMING',
 };
 
 // ─── Cache ──────────────────────────────────────────────────────────────────
 
 const cache = {};
-const CACHE_TTL = 60 * 1000; // 60 seconds
+const LIVE_CACHE_TTL = 15 * 1000;   // 15 seconds for live matches
+const DEFAULT_CACHE_TTL = 30 * 1000; // 30 seconds default
 
 const streamCache = {};
 const STREAM_CACHE_TTL = 2 * 60 * 1000;
@@ -119,6 +122,17 @@ function normalizeMatch(raw) {
   // If status is UNKNOWN but match is in the future → assume UPCOMING
   if (status === 'UNKNOWN' && isFutureMatch) {
     status = 'UPCOMING';
+  }
+
+  // If status is UNKNOWN but match has already started → assume LIVE
+  if (status === 'UNKNOWN' && matchStartSec !== null && matchStartSec <= nowSec) {
+    status = 'LIVE';
+  }
+
+  // If API says MatchIng (match in progress) but statusLive says UnLive,
+  // trust the MatchIng status and mark as LIVE
+  if (statusText === 'MatchIng' && status !== 'LIVE') {
+    status = 'LIVE';
   }
 
   // Parse streams from playSource
@@ -183,7 +197,11 @@ async function fetchMatches(leagueId = '0') {
   const cacheKey = `matches:${leagueId}`;
   const now = Date.now();
 
-  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < CACHE_TTL) {
+  // Check if any match is live — use shorter TTL for live matches
+  const hasLiveMatch = cache[cacheKey]?.data?.live > 0;
+  const cacheTtl = hasLiveMatch ? LIVE_CACHE_TTL : DEFAULT_CACHE_TTL;
+
+  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < cacheTtl) {
     return cache[cacheKey].data;
   }
 
@@ -239,7 +257,7 @@ async function fetchLeagues() {
   const cacheKey = 'leagues';
   const now = Date.now();
 
-  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < CACHE_TTL) {
+  if (cache[cacheKey] && now - cache[cacheKey].lastFetch < DEFAULT_CACHE_TTL) {
     return cache[cacheKey].data;
   }
 

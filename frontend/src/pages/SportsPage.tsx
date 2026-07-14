@@ -180,7 +180,7 @@ function LivePulseBadge({ count }: { count: number }) {
 // ─── Component: StatusBadge ──────────────────────────────────────────────────
 function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'md' }) {
   const isLive = status === 'LIVE';
-  const isUpcoming = status === 'UPCOMING';
+  const isUpcoming = status === 'UPCOMING' || status === 'UNKNOWN';
   const isHalfTime = status === 'HALF_TIME';
 
   const sizeClasses = size === 'md'
@@ -1747,10 +1747,26 @@ export default function SportsPage() {
     }
   }, [sport, source]);
 
+  // Initial fetch
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
+
+  // Polling with visibility awareness — ref-based to avoid stale closures
   useEffect(() => {
-    const t = setInterval(fetchMatches, 60000);
-    return () => clearInterval(t);
+    const intervalMs = 30000; // 30 seconds for more responsive live updates
+    let t = setInterval(fetchMatches, intervalMs);
+
+    const onVisibility = () => {
+      if (!document.hidden) {
+        // Tab became visible — fetch fresh data immediately
+        fetchMatches();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [fetchMatches]);
 
   const handlePlay = useCallback((match: Match) => {
@@ -1802,7 +1818,7 @@ export default function SportsPage() {
       filtered = matches.filter(m => m.league === selectedLeague);
     }
     // Sort: football/soccer matches first within each status group
-    const statusOrder: Record<string, number> = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
+    const statusOrder: Record<string, number> = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, UNKNOWN: 2, FINISHED: 3 };
     const isFootball = (m: Match) => m.sportType === 'football' || m.sportType === 'soccer' ? 0 : 1;
     return [...filtered].sort((a, b) => {
       const statusDiff = (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
@@ -1819,8 +1835,8 @@ export default function SportsPage() {
   }, [matches]);
 
   const live = filteredMatches.filter(m => m.status === 'LIVE');
-  const upcoming = filteredMatches.filter(m => m.status === 'UPCOMING');
-  const finished = filteredMatches.filter(m => !['LIVE', 'UPCOMING'].includes(m.status));
+  const upcoming = filteredMatches.filter(m => m.status === 'UPCOMING' || m.status === 'UNKNOWN');
+  const finished = filteredMatches.filter(m => !['LIVE', 'UPCOMING', 'UNKNOWN'].includes(m.status));
   const hasLive = live.length > 0;
 
   return (
