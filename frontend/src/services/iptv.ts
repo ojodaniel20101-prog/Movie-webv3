@@ -4,7 +4,7 @@
 // No separate base URL or port — fully integrated, single backend.
 
 import type {
-  Channel, ChannelsResponse, LiveCategory, LiveCountry, LiveHealthResponse,
+  Channel, ChannelsResponse, LiveCategory, LiveCountry, LiveHealthResponse, EpgResponse,
 } from '@/types/livetv';
 
 async function get<T>(path: string): Promise<T> {
@@ -66,6 +66,17 @@ export const liveTvApi = {
     const res = await fetch(`/api/iptv/channels-batch-ping?${p}`, { signal: AbortSignal.timeout(15000) });
     return res.json() as Promise<{ results: ({ url: string; ok: boolean; status: number; error?: string })[] }>;
   },
+
+  /** Fetch EPG (Electronic Program Guide) data for a channel.
+   *  Backend caches this for 30 minutes. */
+  epg: async (tvgId: string): Promise<EpgResponse> => {
+    const res = await fetch(`/api/iptv/epg/${encodeURIComponent(tvgId)}`, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `EPG fetch failed: ${res.status}`);
+    }
+    return res.json();
+  },
 };
 
 /** Build the proxied stream URL for a channel (routes through our
@@ -77,4 +88,4 @@ export function liveProxyUrl(url: string, ua?: string, ref?: string): string {
   return `/api/iptv/proxy?${p}`;
 }
 
-export type { Channel, LiveCountry, LiveCategory, ChannelsResponse };
+export type { Channel, LiveCountry, LiveCategory, ChannelsResponse, EpgResponse };

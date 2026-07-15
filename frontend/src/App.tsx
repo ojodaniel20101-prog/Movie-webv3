@@ -29,7 +29,7 @@ const NotificationSettingsPage  = lazy(() => import('@/pages/NotificationSetting
 
 // Lazy components — hls.js is ~150KB+ and only needed once a channel
 // is actually playing, so this must NOT be in the eager/main bundle.
-const LiveVideoPlayer = lazy(() => import('@/components/livetv/LiveVideoPlayer'));
+const EnhancedLivePlayer = lazy(() => import('@/components/livetv/EnhancedLivePlayer'));
 const LiveMiniPlayer  = lazy(() => import('@/components/livetv/LiveMiniPlayer'));
 
 function PageLoader() {
@@ -205,7 +205,7 @@ function AppInner() {
           Plain conditional rendering unmounts the instant the state
           changes, no animation completion required. */}
       <Suspense fallback={null}>
-        {liveChannel && !liveIsMini && <LiveVideoPlayer key="live-player" />}
+        {liveChannel && !liveIsMini && <EnhancedLivePlayer key="live-player" />}
         {liveChannel && liveIsMini && <LiveMiniPlayer key="live-mini" />}
       </Suspense>
 

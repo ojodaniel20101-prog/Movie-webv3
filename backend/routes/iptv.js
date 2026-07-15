@@ -135,6 +135,50 @@ let logoMap     = {}; // tvgId → logoUrl (from iptv-org API)
 let loadError   = null;
 
 // ─────────────────────────────────────────────────────────────────
+//  EPG CACHE  (30-minute TTL)
+// ─────────────────────────────────────────────────────────────────
+const EPG_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+let epgCache = {}; // tvgId → { data, fetchedAt }
+
+// tvg-id → epg.pw channel_id mapping (built from manual lookup)
+const EPG_ID_MAP = {
+  'DisneyJunior.us':  '465320',
+  'DisneyXD.us':      null,
+  'NickJr.us':        null,
+  'Nickelodeon.us':   '465251',
+  'Nicktoons.us':     null,
+  'PBSKids.us':       null,
+  'FoxNewsChannel.us':null,
+  'NBCSportsNOW.us':  null,
+  'MrBean.uk':        null,
+  'AnandTV.in':       null,
+  'HotWheels.us':     null,
+  'KartoonChannel.us':null,
+  'ToonGoggles.us':   null,
+  'ToonGogglesJunior.us': null,
+  'beINSPORTSXTRA.us': null,
+  'beINSPORTSXTRATubi.us': null,
+};
+
+/** Return the currently-airing programme from an epg_list array */
+function getCurrentProgramme(epgList) {
+  if (!epgList || !epgList.length) return null;
+  const now = new Date();
+  // Find the programme whose start_date <= now < next programme's start_date
+  for (let i = 0; i < epgList.length; i++) {
+    const prog = epgList[i];
+    const start = new Date(prog.start_date);
+    const next = epgList[i + 1];
+    const end = next ? new Date(next.start_date) : new Date(start.getTime() + 30 * 60 * 1000);
+    if (now >= start && now < end) {
+      return { title: prog.title, description: prog.desc, start: prog.start_date, end: next ? next.start_date : null };
+    }
+  }
+  // Fallback: return the first programme
+  return epgList[0] ? { title: epgList[0].title, description: epgList[0].desc, start: epgList[0].start_date, end: null } : null;
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  M3U PARSER
 // ─────────────────────────────────────────────────────────────────
 function parseM3U(content, filename) {
@@ -152,12 +196,15 @@ function parseM3U(content, filename) {
     const line = lines[i].trim();
     if (!line.startsWith('#EXTINF:')) continue;
 
-    const tvgIdM      = line.match(/tvg-id="([^"]*)"/);
-    const tvgLogoM    = line.match(/tvg-logo="([^"]*)"/);
-    const groupTitleM = line.match(/group-title="([^"]*)"/);
-    const tvgId      = tvgIdM      ? tvgIdM[1]      : '';
-    const tvgLogo    = tvgLogoM    ? tvgLogoM[1]    : '';
-    const groupTitle = groupTitleM ? groupTitleM[1] : '';
+    const tvgIdM       = line.match(/tvg-id="([^"]*)"/);
+    const tvgLogoM     = line.match(/tvg-logo="([^"]*)"/);
+    const groupTitleM  = line.match(/group-title="([^"]*)"/);
+    const tvgFallbackM = line.match(/tvg-fallback="([^"]*)"/);
+    const tvgId       = tvgIdM       ? tvgIdM[1]       : '';
+    const tvgLogo     = tvgLogoM     ? tvgLogoM[1]     : '';
+    const groupTitle  = groupTitleM  ? groupTitleM[1]  : '';
+    const tvgFallback = tvgFallbackM ? tvgFallbackM[1] : '';
+    const fallbacks   = tvgFallback ? tvgFallback.split('|').filter(u => u.trim().startsWith('http')) : [];
 
     const nameM    = line.match(/,(.+)$/);
     const fullName = nameM ? nameM[1].trim() : 'Unknown';
@@ -199,6 +246,8 @@ function parseM3U(content, filename) {
       country:     cc,
       countryCode: cc.toLowerCase(),
       platform,
+      fallbacks,
+      epgId: EPG_ID_MAP[tvgId] || null,
     });
   }
   return streams;
@@ -432,6 +481,57 @@ async function handleProxy(req, res, method = 'GET') {
 
 router.get('/proxy', proxyLimiter, (req, res) => handleProxy(req, res, 'GET'));
 router.head('/proxy', proxyLimiter, (req, res) => handleProxy(req, res, 'HEAD'));
+
+// ══ GET /api/iptv/epg/:tvgId ════════════════════════════════════════
+// Fetch EPG data from epg.pw for a given tvg-id. Cached for 30 minutes.
+router.get('/epg/:tvgId', apiLimiter, async (req, res) => {
+  const tvgId = req.params.tvgId;
+  if (!tvgId) return res.status(400).json({ error: 'tvgId required' });
+
+  // Check cache first
+  const cached = epgCache[tvgId];
+  if (cached && Date.now() - cached.fetchedAt < EPG_CACHE_TTL_MS) {
+    return res.json(cached.data);
+  }
+
+  // Find epg.pw channel_id
+  const epgChannelId = EPG_ID_MAP[tvgId];
+  if (!epgChannelId) {
+    return res.status(404).json({ error: 'No EPG mapping for this channel' });
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+
+  try {
+    const epgUrl = `https://epg.pw/api/epg.json?channel_id=${epgChannelId}&date=${dateStr}`;
+    const up = await fetch(epgUrl, { signal: AbortSignal.timeout(15000) });
+    if (!up.ok) throw new Error(`epg.pw HTTP ${up.status}`);
+    const epgData = await up.json();
+
+    const currentProg = getCurrentProgramme(epgData.epg_list);
+
+    const result = {
+      tvgId,
+      epgChannelId,
+      channelName: epgData.name || tvgId,
+      currentProgramme: currentProg,
+      programmes: (epgData.epg_list || []).map(p => ({
+        title: p.title,
+        description: p.desc,
+        start: p.start_date,
+      })),
+      cached: false,
+    };
+
+    // Store in cache
+    epgCache[tvgId] = { data: result, fetchedAt: Date.now() };
+    res.json(result);
+  } catch (e) {
+    console.error(`[LiveTV EPG] ${tvgId}:`, e.message);
+    res.status(502).json({ error: `Failed to fetch EPG: ${e.message}` });
+  }
+});
 
 // ══ GET /api/iptv/ping ══════════════════════════════════════════════
 // Lightweight stream health-check. Sends a HEAD request upstream and

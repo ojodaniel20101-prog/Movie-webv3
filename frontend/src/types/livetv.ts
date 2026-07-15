@@ -20,6 +20,28 @@ export interface Channel {
   country:     string;
   countryCode: string;
   platform:    string | null;
+  fallbacks:   string[];
+  epgId:       string | null;
+}
+
+export interface EpgProgramme {
+  title: string;
+  description: string | null;
+  start: string;
+}
+
+export interface EpgResponse {
+  tvgId: string;
+  epgChannelId: string;
+  channelName: string;
+  currentProgramme: {
+    title: string;
+    description: string | null;
+    start: string;
+    end: string | null;
+  } | null;
+  programmes: EpgProgramme[];
+  cached: boolean;
 }
 
 export interface LiveCountry {

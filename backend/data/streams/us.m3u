@@ -2,40 +2,43 @@
 # ─── Zentrix Live TV Channels ─────────────────────────────────────────
 # Source: TrustVerse + iptv-org verified working streams
 # Updated: 2026-07-15
+#
+# tvg-fallback attribute: pipe-separated fallback stream URLs
+# The player will auto-try each fallback if the primary stream fails.
 # ─── Entertainment ────────────────────────────────────────────────────
-#EXTINF:-1 tvg-id="AnandTV.in",Anand TV (720p)
+#EXTINF:-1 tvg-id="AnandTV.in" tvg-logo="https://iptv-org.github.io/iptv/logos/AnandTV.in.png" group-title="Entertainment",Anand TV (720p)
 https://live-anandtv.anandmedia.net/anandtvapp/anandtv/index.m3u8
-#EXTINF:-1 tvg-id="MrBean.uk",Mr Bean Live Action (1080p)
+#EXTINF:-1 tvg-id="MrBean.uk" tvg-logo="https://iptv-org.github.io/iptv/logos/MrBean.uk.png" group-title="Entertainment",Mr Bean Live Action (1080p)
 https://amg00627-amg00627c40-rakuten-uk-5725.playouts.now.amagi.tv/playlist/amg00627-amg00627c40-rakuten-uk-5725/playlist.m3u8
 # ─── Kids ─────────────────────────────────────────────────────────────
-#EXTINF:-1 tvg-id="DisneyJunior.us",Disney Junior (576p)
-http://116.90.120.157:8000/play/a0qo/index.m3u8
-#EXTINF:-1 tvg-id="DisneyXD.us",Disney XD (720p)
+#EXTINF:-1 tvg-id="DisneyJunior.us" tvg-logo="https://iptv-org.github.io/iptv/logos/DisneyJunior.us.png" group-title="Kids" tvg-fallback="http://206.212.244.63/655/index.m3u8",Disney Junior (576p)
+http://40.160.24.52/Disney_JR/index.m3u8
+#EXTINF:-1 tvg-id="DisneyXD.us" tvg-logo="https://iptv-org.github.io/iptv/logos/DisneyXD.us.png" group-title="Kids",Disney XD (720p)
 http://23.237.104.106:8080/USA_DISNEY_XD/index.m3u8
-#EXTINF:-1 tvg-id="HotWheels.us",Hot Wheels Action (1080p)
+#EXTINF:-1 tvg-id="HotWheels.us" tvg-logo="https://iptv-org.github.io/iptv/logos/HotWheels.us.png" group-title="Kids",Hot Wheels Action (1080p)
 https://dtz4aepbew7ez.cloudfront.net/hotwh.m3u8
-#EXTINF:-1 tvg-id="KartoonChannel.us",Kartoon Channel (720p)
+#EXTINF:-1 tvg-id="KartoonChannel.us" tvg-logo="https://iptv-org.github.io/iptv/logos/KartoonChannel.us.png" group-title="Kids",Kartoon Channel (720p)
 https://d2z0ysa6dgxhlc.cloudfront.net/kchan.m3u8
-#EXTINF:-1 tvg-id="NickJr.us",Nick Jr (1080p)
+#EXTINF:-1 tvg-id="NickJr.us" tvg-logo="https://iptv-org.github.io/iptv/logos/NickJr.us.png" group-title="Kids",Nick Jr (1080p)
 http://40.160.24.55/NICK_JR/index.m3u8
-#EXTINF:-1 tvg-id="Nickelodeon.us",Nickelodeon (1080p)
-http://23.237.104.106:8080/USA_NICKELODEON/index.m3u8
-#EXTINF:-1 tvg-id="Nicktoons.us",Nicktoons (720p)
+#EXTINF:-1 tvg-id="Nickelodeon.us" tvg-logo="https://iptv-org.github.io/iptv/logos/Nickelodeon.us.png" group-title="Kids" tvg-fallback="http://40.160.24.55/NICKELODEON/index.m3u8|http://198.58.104.90:8989/nickelodeon/index.m3u8",Nickelodeon (1080p)
+http://206.212.244.63/666/index.m3u8
+#EXTINF:-1 tvg-id="Nicktoons.us" tvg-logo="https://iptv-org.github.io/iptv/logos/Nicktoons.us.png" group-title="Kids",Nicktoons (720p)
 http://40.160.24.55/NICKTOONS/index.m3u8
-#EXTINF:-1 tvg-id="PBSKids.us",PBS Kids (720p)
+#EXTINF:-1 tvg-id="PBSKids.us" tvg-logo="https://iptv-org.github.io/iptv/logos/PBSKids.us.png" group-title="Kids",PBS Kids (720p)
 https://livestream.pbskids.org/out/v1/14507d931bbe48a69287e4850e53443c/est.m3u8
-#EXTINF:-1 tvg-id="ToonGoggles.us",Toon Goggles (720p)
+#EXTINF:-1 tvg-id="ToonGoggles.us" tvg-logo="https://iptv-org.github.io/iptv/logos/ToonGoggles.us.png" group-title="Kids",Toon Goggles (720p)
 https://d1eg24xrsfr6kv.cloudfront.net/tg/tg/tg.m3u8
-#EXTINF:-1 tvg-id="ToonGogglesJunior.us",Toon Goggles Junior (720p)
+#EXTINF:-1 tvg-id="ToonGogglesJunior.us" tvg-logo="https://iptv-org.github.io/iptv/logos/ToonGogglesJunior.us.png" group-title="Kids",Toon Goggles Junior (720p)
 https://d3i6upqaqzosi1.cloudfront.net/tg/jr_us/tg_jr_us.m3u8
 # ─── Movies ───────────────────────────────────────────────────────────
-#EXTINF:-1 tvg-id="beINSPORTSXTRA.us",beIN SPORTS XTRA (720p)
+#EXTINF:-1 tvg-id="beINSPORTSXTRA.us" tvg-logo="https://iptv-org.github.io/iptv/logos/beINSPORTSXTRA.us.png" group-title="Movies",beIN SPORTS XTRA (720p)
 https://bein-xtra-bein.amagi.tv/playlist.m3u8
-#EXTINF:-1 tvg-id="beINSPORTSXTRATubi.us",beIN SPORTS XTRA Tubi (720p)
+#EXTINF:-1 tvg-id="beINSPORTSXTRATubi.us" tvg-logo="https://iptv-org.github.io/iptv/logos/beINSPORTSXTRATubi.us.png" group-title="Movies",beIN SPORTS XTRA Tubi (720p)
 https://aegis-cloudfront-1.tubi.video/651ee7d3-e75b-4748-be86-422d43ff24b6/playlist.m3u8
 # ─── News ─────────────────────────────────────────────────────────────
-#EXTINF:-1 tvg-id="FoxNewsChannel.us",Fox News Channel (720p)
+#EXTINF:-1 tvg-id="FoxNewsChannel.us" tvg-logo="https://iptv-org.github.io/iptv/logos/FoxNewsChannel.us.png" group-title="News",Fox News Channel (720p)
 http://40.160.24.52/FOX_NEWS/index.m3u8
 # ─── Sports ───────────────────────────────────────────────────────────
-#EXTINF:-1 tvg-id="NBCSportsNOW.us",NBC Sports NOW (1080p)
+#EXTINF:-1 tvg-id="NBCSportsNOW.us" tvg-logo="https://iptv-org.github.io/iptv/logos/NBCSportsNOW.us.png" group-title="Sports",NBC Sports NOW (1080p)
 https://d1m1xk35ma8qfl.cloudfront.net/master.m3u8

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Channel } from '@/types/livetv';
+import type { Channel, EpgResponse } from '@/types/livetv';
 
 // ─── Player slice ────────────────────────────────────────────────
 interface PlayerSlice {
@@ -10,6 +10,10 @@ interface PlayerSlice {
   isFullscreen: boolean;
   isMini:       boolean;
   volume:       number;
+  // EPG data
+  epg:          EpgResponse | null;
+  epgLoading:   boolean;
+  activeStreamUrl: string | null;
 }
 
 const defaultPlayer: PlayerSlice = {
@@ -19,6 +23,9 @@ const defaultPlayer: PlayerSlice = {
   isFullscreen: false,
   isMini:       false,
   volume:       1,
+  epg:          null,
+  epgLoading:   false,
+  activeStreamUrl: null,
 };
 
 interface LiveTvState {
@@ -43,6 +50,9 @@ interface LiveTvActions {
   setVolume:        (v: number) => void;
   toggleFullscreen: (v: boolean) => void;
   toggleMini:       (v: boolean) => void;
+  setEpg:           (epg: EpgResponse | null) => void;
+  setEpgLoading:    (loading: boolean) => void;
+  setActiveStreamUrl: (url: string | null) => void;
 
   setLiveCountry: (v: string) => void;
   setLiveCat:     (v: string) => void;
@@ -72,15 +82,27 @@ export const useLiveTvStore = create<LiveTvState & LiveTvActions>()(
 
       play: (ch) => {
         get().addRecent(ch);
-        set(s => ({ player: { ...s.player, channel: ch, isPlaying: true, isMini: false } }));
+        set(s => ({
+          player: {
+            ...s.player,
+            channel: ch,
+            isPlaying: true,
+            isMini: false,
+            activeStreamUrl: ch.url,
+            epg: null,
+          },
+        }));
       },
-      closePlayer: () => set({ player: defaultPlayer }),
+      closePlayer: () => set({ player: { ...defaultPlayer, activeStreamUrl: null, epg: null } }),
 
       togglePlay: () => set(s => ({ player: { ...s.player, isPlaying: !s.player.isPlaying } })),
       toggleMute: () => set(s => ({ player: { ...s.player, isMuted: !s.player.isMuted } })),
       setVolume:  (v) => set(s => ({ player: { ...s.player, volume: v } })),
       toggleFullscreen: (v) => set(s => ({ player: { ...s.player, isFullscreen: v } })),
       toggleMini:       (v) => set(s => ({ player: { ...s.player, isMini: v } })),
+      setEpg:           (epg) => set(s => ({ player: { ...s.player, epg } })),
+      setEpgLoading:    (loading) => set(s => ({ player: { ...s.player, epgLoading: loading } })),
+      setActiveStreamUrl: (url) => set(s => ({ player: { ...s.player, activeStreamUrl: url } })),
 
       setLiveCountry: (v) => set({ liveCountry: v }),
       setLiveCat:     (v) => set({ liveCat: v }),
