@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useLiveTvStore } from '@/store/useLiveTvStore';
 import { liveTvApi, liveProxyUrl } from '@/services/iptv';
+import ShareButton from '@/components/share/ShareButton';
 import type { Channel } from '@/types/livetv';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -189,6 +190,7 @@ function PlayerHeader({
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
 }) {
+  const channelShareUrl = `${window.location.origin}/live?channel=${encodeURIComponent(channel.id)}`;
   return (
     <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
       style={{ background: 'var(--bg, #050816)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -233,6 +235,12 @@ function PlayerHeader({
           </span>
           <span className="text-[10px] font-black tracking-wider" style={{ color: '#ff6b6b' }}>LIVE</span>
         </div>
+        <ShareButton
+          title={channel.name}
+          url={channelShareUrl}
+          size="sm"
+          variant="icon"
+        />
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={onToggleFullscreen}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Hls from 'hls.js';
 import MatchStatsOverlay from '../components/football/MatchStatsOverlay';
+import ShareButton from '@/components/share/ShareButton';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Stream {
@@ -414,6 +415,7 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
 }) {
   const [videoModal, setVideoModal] = useState<{ title: string; url: string } | null>(null);
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
+  const matchShareUrl = `${window.location.origin}/sports?match=${encodeURIComponent(match.id)}&source=${source}`;
 
   return (
     <>
@@ -455,9 +457,17 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
         <div className="px-5 pt-2 pb-4">
           <div className="flex items-center justify-between mb-4">
             <StatusBadge status={match.status} size="md" />
-            <button onClick={onClose} className="p-2 rounded-full transition-colors hover:bg-white/10">
-              <X size={18} style={{ color: '#8899AA' }} />
-            </button>
+            <div className="flex items-center gap-2">
+              <ShareButton
+                title={`${match.homeTeam} vs ${match.awayTeam}`}
+                url={matchShareUrl}
+                size="sm"
+                variant="icon"
+              />
+              <button onClick={onClose} className="p-2 rounded-full transition-colors hover:bg-white/10">
+                <X size={18} style={{ color: '#8899AA' }} />
+              </button>
+            </div>
           </div>
 
           {/* Teams & Score */}
@@ -675,6 +685,7 @@ function HeroMatch({ match, onPlay, onViewDetails, source }: {
   source: 'local' | 'english';
 }) {
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
+  const matchShareUrl = `${window.location.origin}/sports?match=${encodeURIComponent(match.id)}&source=${source}`;
 
   return (
     <motion.div
@@ -762,6 +773,12 @@ function HeroMatch({ match, onPlay, onViewDetails, source }: {
             <BarChart3 size={16} />
             Details
           </motion.button>
+          <ShareButton
+            title={`${match.homeTeam} vs ${match.awayTeam}`}
+            url={matchShareUrl}
+            size="sm"
+            variant="icon"
+          />
         </div>
       </div>
     </motion.div>
@@ -779,6 +796,7 @@ function MatchCard({ match, onPlay, onViewDetails, source, index }: {
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
   const hasHighlights = (match.highlights ?? []).length > 0;
   const hasReplays = (match.replays ?? []).length > 0;
+  const matchShareUrl = `${window.location.origin}/sports?match=${encodeURIComponent(match.id)}&source=${source}`;
 
   return (
     <motion.div
@@ -878,24 +896,34 @@ function MatchCard({ match, onPlay, onViewDetails, source, index }: {
         )}
       </div>
 
-      {/* Watch Button */}
-      {canPlay && (
-        <motion.button
-          onClick={(e) => { e.stopPropagation(); onPlay(match); }}
-          whileTap={{ scale: 0.95 }}
-          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold"
-          style={{
-            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-            color: 'white',
-            boxShadow: '0 4px 16px rgba(239,68,68,0.25)',
-          }}
-        >
-          <Play size={12} className="fill-current" />
-          Watch Live
-        </motion.button>
-      )}
+      {/* Watch Button + Share */}
+      <div className="mt-3 flex items-center gap-2">
+        {canPlay && (
+          <motion.button
+            onClick={(e) => { e.stopPropagation(); onPlay(match); }}
+            whileTap={{ scale: 0.95 }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold"
+            style={{
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              color: 'white',
+              boxShadow: '0 4px 16px rgba(239,68,68,0.25)',
+            }}
+          >
+            <Play size={12} className="fill-current" />
+            Watch Live
+          </motion.button>
+        )}
+        <div onClick={(e) => e.stopPropagation()}>
+          <ShareButton
+            title={`${match.homeTeam} vs ${match.awayTeam}`}
+            url={matchShareUrl}
+            size="sm"
+            variant="icon"
+          />
+        </div>
+      </div>
       {!canPlay && match.status === 'LIVE' && (
-        <div className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold"
+        <div className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold"
           style={{ background: 'rgba(255,255,255,0.03)', color: '#8899AA' }}>
           <WifiOff size={12} /> No stream available
         </div>

@@ -10,9 +10,31 @@
 https://live-anandtv.anandmedia.net/anandtvapp/anandtv/index.m3u8
 #EXTINF:-1 tvg-id="MrBean.uk" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/4/4b/Mr._Bean_logo.svg" group-title="Entertainment",Mr Bean Live Action (1080p)
 https://amg00627-amg00627c40-rakuten-uk-5725.playouts.now.amagi.tv/playlist/amg00627-amg00627c40-rakuten-uk-5725/playlist.m3u8
+#EXTINF:-1 tvg-id="ComedyCentral.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Comedy_Central_2018.svg/1200px-Comedy_Central_2018.svg.png" group-title="Entertainment",Comedy Central (720p)
+http://40.160.24.52/COMEDY_CENTRAL/index.m3u8
+#EXTINF:-1 tvg-id="AE.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/A%26E_Network_logo.svg/1200px-A%26E_Network_logo.svg.png" group-title="Entertainment" tvg-fallback="http://23.239.31.26:8989/aande/index.m3u8|http://206.212.244.63/1/index.m3u8",A&E (720p)
+http://40.160.24.52/AE/index.m3u8
+#EXTINF:-1 tvg-id="BBCAmerica.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/BBC_America_logo_2021.svg/1200px-BBC_America_logo_2021.svg.png" group-title="Entertainment" tvg-fallback="http://23.239.31.26:8989/bbcamerica/index.m3u8",BBC America (720p)
+http://40.160.24.52/BBC_AMERICA/index.m3u8
+#EXTINF:-1 tvg-id="Bravo.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/Bravo_2017_logo.svg/1200px-Bravo_2017_logo.svg.png" group-title="Entertainment",Bravo (720p)
+http://40.160.24.52/BRAVO/index.m3u8
+#EXTINF:-1 tvg-id="E.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/E%21_Logo_2012.svg/1200px-E%21_Logo_2012.svg.png" group-title="Entertainment",E! Entertainment (720p)
+http://40.160.24.52/E_ENTERTAINMENT_EAST/index.m3u8
+#EXTINF:-1 tvg-id="BET.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/BET_logo.svg/1200px-BET_logo.svg.png" group-title="Entertainment",BET (720p)
+http://40.160.24.52/BET_EAST/index.m3u8
+#EXTINF:-1 tvg-id="FX.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/FX_International_logo.svg/1200px-FX_International_logo.svg.png" group-title="Entertainment",FX (720p)
+http://40.160.24.52/FX/index.m3u8
+#EXTINF:-1 tvg-id="FXX.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/FXX_logo.svg/1200px-FXX_logo.svg.png" group-title="Entertainment",FXX (720p)
+http://40.160.24.52/FXX/index.m3u8
+#EXTINF:-1 tvg-id="Freeform.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Freeform_2022.svg/1200px-Freeform_2022.svg.png" group-title="Entertainment",Freeform (720p)
+http://40.160.24.52/FREEFORM/index.m3u8
+#EXTINF:-1 tvg-id="CWSatelliteWest.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/The_CW.svg/1200px-The_CW.svg.png" group-title="Entertainment",The CW (720p)
+http://40.160.24.52/CW/index.m3u8
 # ─── Kids ─────────────────────────────────────────────────────────────
 #EXTINF:-1 tvg-id="DisneyJunior.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/e/e3/2024_Disney_Jr._Logo.svg" group-title="Kids" tvg-fallback="http://206.212.244.63/655/index.m3u8",Disney Junior (576p)
 http://40.160.24.52/Disney_JR/index.m3u8
+#EXTINF:-1 tvg-id="DisneyChannel.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Disney_Channel_2022.svg/1200px-Disney_Channel_2022.svg.png" group-title="Kids" tvg-fallback="http://206.212.244.63/650/index.m3u8",Disney Channel (720p)
+http://40.160.24.52/Disney_Channel_HD/index.m3u8
 #EXTINF:-1 tvg-id="PBSKids.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/3/30/PBS_Kids_logo_%282022%29.svg" group-title="Kids",PBS Kids (720p)
 https://livestream.pbskids.org/out/v1/14507d931bbe48a69287e4850e53443c/est.m3u8
 #EXTINF:-1 tvg-id="HotWheels.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/9/9e/Hot_Wheels_logo.svg" group-title="Kids",Hot Wheels Action (1080p)
@@ -29,13 +51,10 @@ http://40.160.24.55/NICKTOONS/index.m3u8
 https://d1eg24xrsfr6kv.cloudfront.net/tg/tg/tg.m3u8
 #EXTINF:-1 tvg-id="ToonGogglesJunior.us" tvg-logo="https://i.imgur.com/ToonGoggles.png" group-title="Kids",Toon Goggles Junior (720p)
 https://d3i6upqaqzosi1.cloudfront.net/tg/jr_us/tg_jr_us.m3u8
-# ─── New Kids channels from TrustVerse ────────────────────────────────
+#EXTINF:-1 tvg-id="Boomerang.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Boomerang_tv_logo.png/1200px-Boomerang_tv_logo.png" group-title="Kids" tvg-fallback="http://23.237.104.106:8080/USA_BOOMERANG/index.m3u8",Boomerang (720p)
+http://40.160.24.52/BOOMERANG/index.m3u8
 #EXTINF:-1 tvg-id="PlutoTVPokemon.us" tvg-logo="https://i.imgur.com/GEbRABE.png" group-title="Kids",Pokemon TV (720p)
 http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/6675c7868768aa0008d7f1c7/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=d3595b5a-7553-4a6b-b9dd-c30951631395&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=bc32713f-dc5f-45d9-8650-2b4e69506b23
-#EXTINF:-1 tvg-id="DisneyXD.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/6/61/Disney_XD_logo_2015.svg" group-title="Kids" tvg-fallback="http://23.237.104.106:8080/USA_DISNEY_XD/index.m3u8",Disney XD (1080p)
-https://fl5.moveonjoy.com/DISNEY_XD/index.m3u8
-#EXTINF:-1 tvg-id="CartoonNetwork.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Cartoon_Network_2010_logo.svg/1200px-Cartoon_Network_2010_logo.svg.png" group-title="Kids" tvg-fallback="http://38.96.178.201:80/live/CartoonNetwork/index.m3u8",Cartoon Network (1080p)
-http://23.237.104.106:8080/USA_CARTOON_NETWORK/index.m3u8
 #EXTINF:-1 tvg-id="TeenNick.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/TeenNick_2019_logo.svg/1200px-TeenNick_2019_logo.svg.png" group-title="Kids",TeenNick (1080p)
 http://109.233.89.173/TeenNick/index.m3u8
 #EXTINF:-1 tvg-id="TinyPop.uk" tvg-logo="https://upload.wikimedia.org/wikipedia/en/6/6c/Tiny_Pop_logo.png" group-title="Kids",Tiny Pop (576p)
@@ -48,6 +67,16 @@ https://5b622f07944df.streamlock.net/aghapykids.tv/aghapykids2/playlist.m3u8
 https://dil9xdvretp0f.cloudfront.net/index.m3u8
 #EXTINF:-1 tvg-id="3ABNKids.us" tvg-logo="https://i.imgur.com/3ABN.png" group-title="Kids",3ABN Kids (720p)
 https://3abn.bozztv.com/3abn2/Kids_live/smil:Kids_live.smil/playlist.m3u8
+# ─── Documentary ──────────────────────────────────────────────────────
+#EXTINF:-1 tvg-id="DiscoveryChannel.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/2019_Discovery_logo.svg/1200px-2019_Discovery_logo.svg.png" group-title="Documentary",Discovery Channel (720p)
+http://40.160.24.52/DISCOVERY_CHANNEL/index.m3u8
+#EXTINF:-1 tvg-id="AnimalPlanet.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Animal_Planet.png/1200px-Animal_Planet.png" group-title="Documentary",Animal Planet (720p)
+http://40.160.24.52/ANIMAL_PLANET/index.m3u8
+#EXTINF:-1 tvg-id="NationalGeographic.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/National_Geographic_Logo.svg/1200px-National_Geographic_Logo.svg.png" group-title="Documentary" tvg-fallback="http://23.239.31.26:8989/natgeo/index.m3u8",National Geographic (720p)
+http://40.160.24.52/NATIONAL_GEOGRAPHIC/index.m3u8
+# ─── Lifestyle ────────────────────────────────────────────────────────
+#EXTINF:-1 tvg-id="FoodNetwork.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/Food_Network_Logo.svg/1200px-Food_Network_Logo.svg.png" group-title="Lifestyle",Food Network (720p)
+http://40.160.24.52/FOOD_NETWORK/index.m3u8
 # ─── Movies ───────────────────────────────────────────────────────────
 #EXTINF:-1 tvg-id="beINSPORTSXTRA.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/8/8d/BeIN_SPORTS_logo.svg" group-title="Movies",beIN SPORTS XTRA (720p)
 https://bein-xtra-bein.amagi.tv/playlist.m3u8
@@ -56,6 +85,12 @@ https://aegis-cloudfront-1.tubi.video/651ee7d3-e75b-4748-be86-422d43ff24b6/playl
 # ─── News ─────────────────────────────────────────────────────────────
 #EXTINF:-1 tvg-id="FoxNewsChannel.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/6/67/Fox_News_Channel_logo.svg" group-title="News",Fox News Channel (720p)
 http://40.160.24.52/FOX_NEWS/index.m3u8
+#EXTINF:-1 tvg-id="CNN.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN.svg/1200px-CNN.svg.png" group-title="News" tvg-fallback="http://206.212.244.63/2/index.m3u8",CNN (1080p)
+https://turnerlive.warnermediacdn.com/hls/live/586495/cnngo/cnn_slate/VIDEO_0_3564000.m3u8
+#EXTINF:-1 tvg-id="CourtTV.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Court_TV_2022.svg/1200px-Court_TV_2022.svg.png" group-title="News",Court TV (1080p)
+https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01438-ewscrippscompan-courttv-tablo/playlist.m3u8
 # ─── Sports ───────────────────────────────────────────────────────────
 #EXTINF:-1 tvg-id="NBCSportsNOW.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/7/78/NBC_Sports_logo.svg" group-title="Sports",NBC Sports NOW (1080p)
 https://d1m1xk35ma8qfl.cloudfront.net/master.m3u8
+#EXTINF:-1 tvg-id="CBSSportsNetworkUSA.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/CBS_Sports_Network_logo.svg/1200px-CBS_Sports_Network_logo.svg.png" group-title="Sports",CBS Sports Network (720p)
+http://40.160.24.52/CBS_SPORTS_NETWORK/index.m3u8

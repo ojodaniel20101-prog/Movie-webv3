@@ -7,6 +7,7 @@ import {
   Flame, Download
 } from 'lucide-react';
 import InstallAppButton from '../pwa/InstallAppButton';
+import LiveSearchDropdown from '@/components/search/LiveSearchDropdown';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const navLinks = [
@@ -30,8 +31,10 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled,     setScrolled]     = useState(false);
   const [hidden,       setHidden]       = useState(false);
+  const [showLiveSearch, setShowLiveSearch] = useState(false);
 
   const searchRef   = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastScrollY = useRef(0);
   const isHome = location.pathname === '/';
@@ -68,11 +71,31 @@ export default function Navbar() {
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    setShowLiveSearch(false);
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery('');
     }
   }, [searchQuery, navigate]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    if (value.trim().length >= 2) {
+      setShowLiveSearch(true);
+    } else {
+      setShowLiveSearch(false);
+    }
+  }, []);
+
+  const handleLiveSearchClose = useCallback(() => {
+    setShowLiveSearch(false);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+    setShowLiveSearch(false);
+    searchRef.current?.focus();
+  }, []);
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/';
@@ -141,34 +164,48 @@ export default function Navbar() {
 
           {/* ─── SEARCH BAR (home page only) ───────────────── */}
           {isHome ? (
-            <form
-              onSubmit={handleSearch}
+            <div
+              ref={searchContainerRef}
               className="flex-1 md:flex-none md:w-56 lg:w-72 relative"
             >
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search movies, shows..."
-                className="w-full h-9 pl-9 pr-4 rounded-xl text-sm text-white placeholder-gray-500 outline-none transition-all duration-200 focus:ring-1 focus:ring-primary-500/40"
-                style={{
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.09)',
-                  fontSize: '16px',
-                }}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </form>
+              <form onSubmit={handleSearch} className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search movies, shows..."
+                  className="w-full h-9 pl-9 pr-4 rounded-xl text-sm text-white placeholder-gray-500 outline-none transition-all duration-200 focus:ring-1 focus:ring-primary-500/40"
+                  style={{
+                    background: 'rgba(255,255,255,0.07)',
+                    border: '1px solid rgba(255,255,255,0.09)',
+                    fontSize: '16px',
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors z-10"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </form>
+
+              {/* Live search dropdown */}
+              <AnimatePresence>
+                {showLiveSearch && (
+                  <LiveSearchDropdown
+                    query={searchQuery}
+                    onClose={handleLiveSearchClose}
+                    onClear={handleClearSearch}
+                    anchorRef={searchContainerRef}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
           ) : (
             <div className="flex-1" />
           )}

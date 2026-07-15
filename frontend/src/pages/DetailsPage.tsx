@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Star, Clock, Calendar, Bookmark, BookmarkCheck,
   Heart, ChevronDown, ChevronRight, ExternalLink,
-  Info, Tv, Film, List, Users, ArrowLeft, Loader2, Layers, AlertTriangle
+  Info, Tv, Film, List, Users, ArrowLeft, Loader2, Layers, AlertTriangle,
+  Share2,
 } from 'lucide-react';
 import {
   getMovieDetails, getShowDetails, getSeasonDetails,
@@ -17,6 +18,7 @@ import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { SkeletonDetails } from '@/components/ui/SkeletonCard';
 import ContentRow from '@/components/ui/ContentRow';
 import DownloadSection from '@/components/DownloadSection';
+import ShareButton from '@/components/share/ShareButton';
 import type { ContentType, Season, Episode } from '@/types';
 
 type DetailType = 'movie' | 'tv' | 'anime';
@@ -193,6 +195,9 @@ export default function DetailsPage() {
     contentType === 'anime'
       ? `/watch/anime/${id}?episode=${ep.episode_number}`
       : `/watch/tv/${id}?season=${ep.season_number}&episode=${ep.episode_number}`;
+
+  // ── Share URL ────────────────────────────────────────────
+  const shareUrl = `${window.location.origin}/details/${contentType}/${contentId}`;
 
   // ── Loading / error ──────────────────────────────────────
   if (isLoading) return <SkeletonDetails />;
@@ -387,6 +392,13 @@ export default function DetailsPage() {
                   : <Bookmark size={16} />}
                 {inWatchlist ? 'In List' : 'Watchlist'}
               </motion.button>
+
+              <ShareButton
+                title={title}
+                url={shareUrl}
+                size="md"
+                variant="icon"
+              />
 
               <motion.button
                 onClick={handleFavorite} className="btn-icon w-12 h-12"
