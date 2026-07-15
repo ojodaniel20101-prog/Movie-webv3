@@ -30,6 +30,18 @@ https://d1eg24xrsfr6kv.cloudfront.net/tg/tg/tg.m3u8
 #EXTINF:-1 tvg-id="ToonGogglesJunior.us" tvg-logo="https://i.imgur.com/ToonGoggles.png" group-title="Kids",Toon Goggles Junior (720p)
 https://d3i6upqaqzosi1.cloudfront.net/tg/jr_us/tg_jr_us.m3u8
 # ─── New Kids channels from TrustVerse ────────────────────────────────
+#EXTINF:-1 tvg-id="PlutoTVPokemon.us" tvg-logo="https://i.imgur.com/GEbRABE.png" group-title="Kids",Pokemon TV (720p)
+http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/6675c7868768aa0008d7f1c7/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=d3595b5a-7553-4a6b-b9dd-c30951631395&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=bc32713f-dc5f-45d9-8650-2b4e69506b23
+#EXTINF:-1 tvg-id="DisneyXD.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/6/61/Disney_XD_logo_2015.svg" group-title="Kids" tvg-fallback="http://23.237.104.106:8080/USA_DISNEY_XD/index.m3u8",Disney XD (1080p)
+https://fl5.moveonjoy.com/DISNEY_XD/index.m3u8
+#EXTINF:-1 tvg-id="CartoonNetwork.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Cartoon_Network_2010_logo.svg/1200px-Cartoon_Network_2010_logo.svg.png" group-title="Kids" tvg-fallback="http://38.96.178.201:80/live/CartoonNetwork/index.m3u8",Cartoon Network (1080p)
+http://23.237.104.106:8080/USA_CARTOON_NETWORK/index.m3u8
+#EXTINF:-1 tvg-id="TeenNick.us" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/TeenNick_2019_logo.svg/1200px-TeenNick_2019_logo.svg.png" group-title="Kids",TeenNick (1080p)
+http://109.233.89.173/TeenNick/index.m3u8
+#EXTINF:-1 tvg-id="TinyPop.uk" tvg-logo="https://upload.wikimedia.org/wikipedia/en/6/6c/Tiny_Pop_logo.png" group-title="Kids",Tiny Pop (576p)
+http://45.153.35.210:8000/play/UK_tiny_pop_sd/index.m3u8
+#EXTINF:-1 tvg-id="PopKids.uk" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Pop_TV_Logo.svg/1200px-Pop_TV_Logo.svg.png" group-title="Kids",Pop Kids (576p)
+http://45.153.35.210:8000/play/UK_pop_sd/index.m3u8
 #EXTINF:-1 tvg-id="AghapyKids.us" tvg-logo="https://i.imgur.com/8ariztD.png" group-title="Kids",Aghapy Kids (1080p)
 https://5b622f07944df.streamlock.net/aghapykids.tv/aghapykids2/playlist.m3u8
 #EXTINF:-1 tvg-id="HappyKids.us" tvg-logo="https://i.imgur.com/cPrUCFw.png" group-title="Kids",HappyKids (1080p)

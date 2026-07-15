@@ -160,6 +160,8 @@ const EPG_ID_MAP = {
   'beINSPORTSXTRA.us':   null,      // No EPG
   'beINSPORTSXTRATubi.us':null,     // No EPG
   // New channels from TrustVerse
+  'PlutoTVPokemon.us':   null,      // Pluto TV - No EPG available
+  'DisneyXD.us':         '465349',  // Disney Channel HD (closest match)
   'CartoonNetwork.us':   '543449',  // CARTOON NETWORK
   'TeenNick.us':         null,      // Not available on epg.pw
   'Boomerang.us':        null,      // Not available on epg.pw
