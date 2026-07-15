@@ -140,24 +140,34 @@ let loadError   = null;
 const EPG_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 let epgCache = {}; // tvgId → { data, fetchedAt }
 
-// tvg-id → epg.pw channel_id mapping (built from manual lookup)
+// tvg-id → epg.pw channel_id mapping (built from manual lookup at epg.pw)
+// To find a channel ID: visit https://epg.pw and search for the channel
 const EPG_ID_MAP = {
-  'DisneyJunior.us':  '465320',
-  'DisneyXD.us':      null,
-  'NickJr.us':        null,
-  'Nickelodeon.us':   '465251',
-  'Nicktoons.us':     null,
-  'PBSKids.us':       null,
-  'FoxNewsChannel.us':null,
-  'NBCSportsNOW.us':  null,
-  'MrBean.uk':        null,
-  'AnandTV.in':       null,
-  'HotWheels.us':     null,
-  'KartoonChannel.us':null,
-  'ToonGoggles.us':   null,
-  'ToonGogglesJunior.us': null,
-  'beINSPORTSXTRA.us': null,
-  'beINSPORTSXTRATubi.us': null,
+  'DisneyJunior.us':     '543448',  // DISNEY JUNIOR
+  'DisneyXD.us':         '465349',  // Disney Channel HD (closest match)
+  'NickJr.us':           '465260',  // Nick Jr
+  'Nickelodeon.us':      '465251',  // Nickelodeon HD
+  'Nicktoons.us':        null,      // Not available on epg.pw
+  'PBSKids.us':          '464770',  // PBS Kids Stream
+  'FoxNewsChannel.us':   '470504',  // Fox News Channel
+  'NBCSportsNOW.us':     null,      // Streaming-only, no EPG
+  'MrBean.uk':           null,      // No EPG
+  'AnandTV.in':          null,      // No EPG
+  'HotWheels.us':        null,      // No EPG
+  'KartoonChannel.us':   null,      // No EPG
+  'ToonGoggles.us':      null,      // No EPG
+  'ToonGogglesJunior.us':null,      // No EPG
+  'beINSPORTSXTRA.us':   null,      // No EPG
+  'beINSPORTSXTRATubi.us':null,     // No EPG
+  // New channels from TrustVerse
+  'CartoonNetwork.us':   '543449',  // CARTOON NETWORK
+  'TeenNick.us':         null,      // Not available on epg.pw
+  'Boomerang.us':        null,      // Not available on epg.pw
+  'BabySharkTV.us':      null,      // No EPG
+  'PopKids.uk':          null,      // No EPG
+  'TinyPop.uk':          null,      // No EPG
+  'AghapyKids.us':       null,      // No EPG
+  'PokemonTV.us':        null,      // No EPG
 };
 
 /** Return the currently-airing programme from an epg_list array */

@@ -12,13 +12,42 @@ export function initials(name: string): string {
   return name.split(/[\s\-/]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
 }
 
+/**
+ * Logo URL sources to try in order:
+ * 1. The logo from M3U (if provided)
+ * 2. Wikimedia Commons ( iptv-org database source )
+ * 3. i.imgur (common fallback host in iptv-org)
+ */
+const LOGO_OVERRIDES: Record<string, string> = {
+  'DisneyJunior.us':  'https://upload.wikimedia.org/wikipedia/commons/e/e3/2024_Disney_Jr._Logo.svg',
+  'DisneyXD.us':      'https://upload.wikimedia.org/wikipedia/commons/a/a8/2015_Disney_XD_logo.svg',
+  'NickJr.us':        'https://upload.wikimedia.org/wikipedia/commons/3/3d/Nick_Jr._logo_2023.svg',
+  'Nickelodeon.us':   'https://upload.wikimedia.org/wikipedia/commons/3/39/Nickelodeon_2023_logo_%28horizontal%29.svg',
+  'Nicktoons.us':     'https://upload.wikimedia.org/wikipedia/commons/a/a8/Nicktoons_%28TV_channel%29_logo.svg',
+  'PBSKids.us':       'https://upload.wikimedia.org/wikipedia/commons/3/30/PBS_Kids_logo_%282022%29.svg',
+  'FoxNewsChannel.us':'https://upload.wikimedia.org/wikipedia/commons/6/67/Fox_News_Channel_logo.svg',
+  'NBCSportsNOW.us':  'https://upload.wikimedia.org/wikipedia/commons/7/78/NBC_Sports_logo.svg',
+  'MrBean.uk':        'https://upload.wikimedia.org/wikipedia/commons/4/4c/Mr._Bean_%28character%29.png',
+  'AnandTV.in':       'https://i.imgur.com/AnandTV.png',
+  'HotWheels.us':     'https://upload.wikimedia.org/wikipedia/commons/9/9e/Hot_Wheels_logo.svg',
+  'KartoonChannel.us':'https://upload.wikimedia.org/wikipedia/commons/8/8a/Kartoon_Channel_logo.png',
+  'ToonGoggles.us':   'https://i.imgur.com/ToonGoggles.png',
+  'ToonGogglesJunior.us': 'https://i.imgur.com/ToonGoggles.png',
+  'beINSPORTSXTRA.us':    'https://upload.wikimedia.org/wikipedia/commons/8/8d/BeIN_SPORTS_logo.svg',
+  'beINSPORTSXTRATubi.us':'https://upload.wikimedia.org/wikipedia/commons/8/8d/BeIN_SPORTS_logo.svg',
+};
+
 export function logoUrls(logo: string, tvgId: string): string[] {
   const urls: string[] = [];
-  if (logo) urls.push(logo);
+  // 1. M3U-provided logo (if valid http URL)
+  if (logo && logo.startsWith('http')) urls.push(logo);
+  // 2. Hard-coded Wikimedia Commons / known-good URLs
+  if (tvgId && LOGO_OVERRIDES[tvgId]) urls.push(LOGO_OVERRIDES[tvgId]);
+  // 3. Try iptv-org API CDN (PNG thumbnails of SVGs)
   if (tvgId) {
-    urls.push(`https://iptv-org.github.io/iptv/logos/${tvgId}.png`);
+    urls.push(`https://iptv-org.github.io/api/logos/${tvgId}.png`);
     const base = tvgId.split('@')[0];
-    if (base !== tvgId) urls.push(`https://iptv-org.github.io/iptv/logos/${base}.png`);
+    if (base !== tvgId) urls.push(`https://iptv-org.github.io/api/logos/${base}.png`);
   }
   return urls;
 }

@@ -39,8 +39,14 @@ export default function LiveVideoPlayer() {
     const src = liveProxyUrl(channel.url, channel.userAgent, channel.referer);
     const isHLS = /\.m3u8?(\?|$)/i.test(channel.url) || channel.url.includes('.m3u');
 
-    const onPlaying = () => setStatus('playing');
-    const onError   = () => setStatus('error');
+    // Safety timeout: prevent infinite loading state
+    const loadTimeout = setTimeout(() => {
+      console.warn('[LiveTV] Loading timeout for', channel.name);
+      setStatus('error');
+    }, 30000);
+
+    const onPlaying = () => { clearTimeout(loadTimeout); setStatus('playing'); };
+    const onError   = () => { clearTimeout(loadTimeout); setStatus('error'); };
 
     if (isHLS && Hls.isSupported()) {
       const hls = new Hls({
@@ -79,7 +85,7 @@ export default function LiveVideoPlayer() {
       hlsRef.current = hls;
       hls.loadSource(src);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { clearTimeout(loadTimeout); video.play().catch(() => {}); });
       hls.on(Hls.Events.ERROR, (_e, d) => {
         if (d.fatal) {
           // Try to recover on fatal errors instead of giving up immediately
@@ -90,6 +96,7 @@ export default function LiveVideoPlayer() {
             console.warn('[LiveTV] Media error, attempting recovery...');
             hls.recoverMediaError();
           } else {
+            clearTimeout(loadTimeout);
             setStatus('error');
           }
         }
@@ -104,11 +111,12 @@ export default function LiveVideoPlayer() {
     } else {
       video.src = src;
       video.play().catch(() => {});
-      video.addEventListener('canplay', () => { video.play().catch(() => {}); setStatus('playing'); }, { once: true });
+      video.addEventListener('canplay', () => { clearTimeout(loadTimeout); video.play().catch(() => {}); setStatus('playing'); }, { once: true });
       video.addEventListener('error', onError, { once: true });
     }
 
     return () => {
+      clearTimeout(loadTimeout);
       clearTimeout(scanTimer);
       hlsRef.current?.destroy();
       video.src = '';

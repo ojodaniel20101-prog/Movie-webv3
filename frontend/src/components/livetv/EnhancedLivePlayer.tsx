@@ -267,7 +267,7 @@ function ChannelInfoBar({ channel, epg }: { channel: Channel; epg: import('@/typ
         </div>
       </div>
 
-      {/* Channel Name */}
+      {/* Channel Name + Logo (single display — header already shows name) */}
       <div className="flex items-center justify-center gap-3 mb-3">
         {channel.logo ? (
           <img src={channel.logo} alt={channel.name} className="w-12 h-12 object-contain rounded-xl" />
@@ -277,14 +277,11 @@ function ChannelInfoBar({ channel, epg }: { channel: Channel; epg: import('@/typ
             {channel.name.slice(0, 2).toUpperCase()}
           </div>
         )}
-        <div>
-          <span className="text-lg font-bold text-white">{channel.name}</span>
-          {channel.quality && (
-            <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,212,255,0.12)', color: '#22D3EE' }}>
-              {channel.quality}
-            </span>
-          )}
-        </div>
+        {channel.quality && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,212,255,0.12)', color: '#22D3EE' }}>
+            {channel.quality}
+          </span>
+        )}
       </div>
 
       {/* EPG: Now Playing */}
@@ -381,8 +378,26 @@ export default function EnhancedLivePlayer() {
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     video.src = '';
 
-    const onPlaying = () => setLoading(false);
+    // Safety timeout: if nothing happens in 25s, show error (prevents infinite loading)
+    const loadTimeout = setTimeout(() => {
+      console.warn('[LiveTV] Loading timeout for', channel.name);
+      setLoading(false);
+      // Auto-try next fallback if available
+      const idx = streamOptions.findIndex(s => s.url === currentStreamUrl);
+      if (idx >= 0 && idx < streamOptions.length - 1) {
+        setError('Stream timed out — trying next...');
+        setTimeout(() => {
+          setActiveStreamIndex(idx + 1);
+          setActiveStreamUrl(streamOptions[idx + 1].url);
+        }, 600);
+      } else {
+        setError('Stream unavailable — timed out');
+      }
+    }, 25000);
+
+    const onPlaying = () => { clearTimeout(loadTimeout); setLoading(false); };
     const onError = () => {
+      clearTimeout(loadTimeout);
       setLoading(false);
       // Auto-try next fallback
       const idx = streamOptions.findIndex(s => s.url === currentStreamUrl);
@@ -400,28 +415,48 @@ export default function EnhancedLivePlayer() {
     if (Hls.isSupported() && /\.m3u8?/i.test(currentStreamUrl)) {
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: true,
-        maxBufferLength: 30,
+        lowLatencyMode: false,        // disabled for broader compatibility
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
         manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 3,
         fragLoadingTimeOut: 20000,
+        fragLoadingMaxRetry: 3,
         levelLoadingTimeOut: 20000,
+        levelLoadingMaxRetry: 3,
+        // Be more forgiving with stalls
+        highBufferWatchdogPeriod: 3,
+        nudgeOffset: 0.3,
+        nudgeMaxRetry: 5,
       });
       hlsRef.current = hls;
       hls.loadSource(proxyUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        clearTimeout(loadTimeout);
         setLoading(false);
         video.play().catch(() => {});
       });
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (data.fatal) {
-          onError();
+          // Try to recover on network/media errors before giving up
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            console.warn('[LiveTV] Network error, attempting recovery...');
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            console.warn('[LiveTV] Media error, attempting recovery...');
+            hls.recoverMediaError();
+          } else {
+            clearTimeout(loadTimeout);
+            onError();
+          }
         }
       });
       video.addEventListener('playing', onPlaying, { once: true });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = proxyUrl;
       video.addEventListener('loadedmetadata', () => {
+        clearTimeout(loadTimeout);
         setLoading(false);
         video.play().catch(() => {});
       }, { once: true });
@@ -430,6 +465,7 @@ export default function EnhancedLivePlayer() {
       video.src = proxyUrl;
       video.play().catch(() => {});
       video.addEventListener('canplay', () => {
+        clearTimeout(loadTimeout);
         setLoading(false);
         video.play().catch(() => {});
       }, { once: true });
@@ -437,6 +473,7 @@ export default function EnhancedLivePlayer() {
     }
 
     return () => {
+      clearTimeout(loadTimeout);
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
       video.src = '';
     };
