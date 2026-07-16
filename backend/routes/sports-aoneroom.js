@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * SPORTS API ROUTE — h5-sport-api.aoneroom.com Integration
+ * SPORTS API ROUTE — h5-sport-api.aoneroom.com Integration  (FIXED v2)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Primary Source: h5-sport-api.aoneroom.com
@@ -10,16 +10,22 @@
  *   - GET /api/sports-v2/stream-proxy?url=<m3u8_url> — Stream proxy
  *   - POST /api/sports-v2/test-streams — Test stream availability
  *
- * Features:
- *   - Live matches with English streams
- *   - Upcoming matches
- *   - Past matches with replays & highlights
- *   - Direct m3u8 stream URLs
- *   - 60-second cache for match lists
+ * FIXES applied (v2):
+ *   1. playPath (main direct m3u8) is now included as the FIRST stream in
+ *      the streams array — previously it was omitted, causing "Loading..."
+ *   2. stream-proxy now uses URL() constructor for correct relative-path
+ *      resolution (handles ../ ./ and absolute paths inside m3u8)
+ *   3. stream-proxy forwards Origin + Referer to upstream to avoid 403s
+ *   4. stream-proxy handles #EXT-X-KEY URI=, #EXT-X-MAP URI=, and
+ *      #EXT-X-MEDIA URI= attributes comprehensively
+ *   5. Added VioletFlix fallback when aoneroom returns no matches / no streams
  */
 
 const express = require('express');
 const router = express.Router();
+
+// ─── VioletFlix Fallback ────────────────────────────────────────────────────
+const { fetchVioletFlixMatches, fetchVioletFlixDetail } = require('./sports-violetflix');
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
@@ -37,6 +43,7 @@ const STREAM_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'Accept': '*/*',
   'Referer': 'https://sportsnow.top/',
+  'Origin': 'https://sportsnow.top',
 };
 
 // ─── Status Mapping ─────────────────────────────────────────────────────────
@@ -64,8 +71,8 @@ const STATUS_LIVE_MAP = {
 // ─── Cache ──────────────────────────────────────────────────────────────────
 
 const cache = {};
-const LIVE_CACHE_TTL = 15 * 1000;   // 15 seconds for live matches
-const DEFAULT_CACHE_TTL = 30 * 1000; // 30 seconds default
+const LIVE_CACHE_TTL = 15 * 1000;
+const DEFAULT_CACHE_TTL = 30 * 1000;
 
 const streamCache = {};
 const STREAM_CACHE_TTL = 2 * 60 * 1000;
@@ -103,7 +110,7 @@ async function fetchFromAPI(endpoint, params = {}) {
 function extractStreamUrl(url) {
   if (!url) return null;
 
-  // Already a direct m3u8 URL
+  // Already a direct m3u8 URL (and not an HTML page)
   if (url.match(/\.m3u8(?:\?|$)/i) && !url.includes('.html')) {
     return url;
   }
@@ -122,9 +129,9 @@ function extractStreamUrl(url) {
     return url;
   }
 
-  // If it looks like an HTML page but has an m3u8 in the query, try to extract
-  if (url.includes('.html') || url.includes('?')) {
-    const genericMatch = url.match(/[?&](?:url|src|video|stream)=([^&]+)/i);
+  // Generic fallback: look for any m3u8 or http URL in query params
+  if (url.includes('?')) {
+    const genericMatch = url.match(/[?&](?:url|src|video|stream|link)=([^&]+)/i);
     if (genericMatch) {
       const decoded = decodeURIComponent(genericMatch[1]);
       if (decoded.match(/\.m3u8(?:\?|$)/i) || decoded.startsWith('http')) {
@@ -133,7 +140,7 @@ function extractStreamUrl(url) {
     }
   }
 
-  return url; // fallback: return original
+  return url;
 }
 
 // ─── Normalize Match ────────────────────────────────────────────────────────
@@ -150,40 +157,63 @@ function normalizeMatch(raw) {
   const isZeroZero = homeScore === '0' && awayScore === '0';
   const isFutureMatch = matchStartSec !== null && matchStartSec > nowSec;
 
-  // ── Safety checks for incorrectly classified matches ────────────────
-
-  // If marked FINISHED but 0:0 and hasn't started yet → treat as UPCOMING
+  // Safety checks for incorrectly classified matches
   if (status === 'FINISHED' && isZeroZero && isFutureMatch) {
     status = 'UPCOMING';
   }
-
-  // If status is UNKNOWN but match is in the future → assume UPCOMING
   if (status === 'UNKNOWN' && isFutureMatch) {
     status = 'UPCOMING';
   }
-
-  // If status is UNKNOWN but match has already started → assume LIVE
   if (status === 'UNKNOWN' && matchStartSec !== null && matchStartSec <= nowSec) {
     status = 'LIVE';
   }
-
-  // If API says MatchIng (match in progress) but statusLive says UnLive,
-  // trust the MatchIng status and mark as LIVE
   if (statusText === 'MatchIng' && status !== 'LIVE') {
     status = 'LIVE';
   }
 
-  // Parse streams from playSource — extract real m3u8 from HTML wrappers
-  const streams = (raw.playSource || []).map((src, idx) => {
+  // ── FIX v2: Build streams array ──────────────────────────────────────
+  // playPath is the PRIMARY direct m3u8 feed from aoneroom. It MUST be
+  // included as the first stream — previously it was omitted, leaving
+  // only wrapper/aggregator links in playSource.
+  const streams = [];
+
+  // 1. Add playPath as the primary stream (direct m3u8)
+  if (raw.playPath) {
+    const extracted = extractStreamUrl(raw.playPath);
+    if (extracted) {
+      streams.push({
+        name: 'Main Feed',
+        url: extracted,
+        originalUrl: raw.playPath,
+        type: 'hls',
+        quality: 'HD',
+      });
+    }
+  }
+
+  // 2. Add playSource channels
+  (raw.playSource || []).forEach((src, idx) => {
     const extracted = extractStreamUrl(src.path || '');
-    return {
-      name: src.title || `Channel ${idx + 1}`,
-      url: extracted || '',
-      originalUrl: src.path || '',
-      type: 'hls',
-      quality: 'HD',
-    };
-  }).filter(s => s.url);
+    if (extracted) {
+      streams.push({
+        name: src.title || `Channel ${idx + 1}`,
+        url: extracted,
+        originalUrl: src.path || '',
+        type: 'hls',
+        quality: 'HD',
+      });
+    }
+  });
+
+  // Deduplicate by URL
+  const seenUrls = new Set();
+  const dedupedStreams = [];
+  for (const s of streams) {
+    if (!seenUrls.has(s.url)) {
+      seenUrls.add(s.url);
+      dedupedStreams.push(s);
+    }
+  }
 
   // Parse replays
   const replays = (raw.replay || []).map((r, idx) => ({
@@ -224,7 +254,7 @@ function normalizeMatch(raw) {
     sportType: raw.type || 'football',
     playType: raw.playType || '',
     playPath: raw.playPath || '',
-    streams,
+    streams: dedupedStreams.slice(0, 6),
     replays,
     highlights,
     hasVideo: raw.playType === 'PlayTypeVideo',
@@ -239,7 +269,6 @@ async function fetchMatches(leagueId = '0') {
   const cacheKey = `matches:${leagueId}`;
   const now = Date.now();
 
-  // Check if any match is live — use shorter TTL for live matches
   const hasLiveMatch = cache[cacheKey]?.data?.live > 0;
   const cacheTtl = hasLiveMatch ? LIVE_CACHE_TTL : DEFAULT_CACHE_TTL;
 
@@ -266,10 +295,60 @@ async function fetchMatches(leagueId = '0') {
       finished: matches.filter(m => m.status === 'FINISHED').length,
     };
 
+    // ── FIX v2: Fallback to VioletFlix if aoneroom returns nothing ──
+    if (matches.length === 0) {
+      try {
+        const vfMatches = await fetchVioletFlixMatches(leagueId);
+        if (vfMatches && vfMatches.length > 0) {
+          const vfNormalized = vfMatches.map(normalizeMatch);
+          vfNormalized.sort((a, b) => {
+            const statusOrder = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
+            return (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+          });
+          return {
+            matches: vfNormalized,
+            leagueId,
+            hasMore: false,
+            total: vfNormalized.length,
+            live: vfNormalized.filter(m => m.status === 'LIVE').length,
+            upcoming: vfNormalized.filter(m => m.status === 'UPCOMING').length,
+            finished: vfNormalized.filter(m => m.status === 'FINISHED').length,
+            source: 'violetflix',
+          };
+        }
+      } catch (vfErr) {
+        // VioletFlix fallback failed too — return empty
+      }
+    }
+
     cache[cacheKey] = { data: result, lastFetch: now };
     return result;
 
   } catch (err) {
+    // Try VioletFlix as fallback on aoneroom error
+    try {
+      const vfMatches = await fetchVioletFlixMatches(leagueId);
+      if (vfMatches && vfMatches.length > 0) {
+        const vfNormalized = vfMatches.map(normalizeMatch);
+        vfNormalized.sort((a, b) => {
+          const statusOrder = { LIVE: 0, HALF_TIME: 1, UPCOMING: 2, FINISHED: 3 };
+          return (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+        });
+        return {
+          matches: vfNormalized,
+          leagueId,
+          hasMore: false,
+          total: vfNormalized.length,
+          live: vfNormalized.filter(m => m.status === 'LIVE').length,
+          upcoming: vfNormalized.filter(m => m.status === 'UPCOMING').length,
+          finished: vfNormalized.filter(m => m.status === 'FINISHED').length,
+          source: 'violetflix',
+        };
+      }
+    } catch (vfErr) {
+      // ignore
+    }
+
     if (cache[cacheKey]?.data) {
       return cache[cacheKey].data;
     }
@@ -284,11 +363,37 @@ async function fetchMatchDetail(matchId) {
     const data = await fetchFromAPI('/sport/detail-v1', { matchId });
     const match = data.match ? normalizeMatch(data.match) : null;
 
+    // ── FIX v2: Fallback to VioletFlix if aoneroom detail has no streams ──
+    if (!match || (match.streams.length === 0 && match.replays.length === 0 && match.highlights.length === 0)) {
+      try {
+        const vfDetail = await fetchVioletFlixDetail(matchId);
+        if (vfDetail) {
+          const vfMatch = normalizeMatch(vfDetail);
+          if (vfMatch.streams.length > 0 || vfMatch.replays.length > 0) {
+            return { success: true, match: vfMatch, source: 'violetflix' };
+          }
+        }
+      } catch (vfErr) {
+        // ignore
+      }
+    }
+
     return {
       success: !!match,
       match,
     };
   } catch (err) {
+    // Try VioletFlix fallback
+    try {
+      const vfDetail = await fetchVioletFlixDetail(matchId);
+      if (vfDetail) {
+        const vfMatch = normalizeMatch(vfDetail);
+        return { success: true, match: vfMatch, source: 'violetflix' };
+      }
+    } catch (vfErr) {
+      // ignore
+    }
+
     return { success: false, error: err.message };
   }
 }
@@ -309,7 +414,7 @@ async function fetchLeagues() {
       id: String(l.id),
       name: l.name || l.localName || '',
       localName: l.localName || '',
-    })).filter(l => l.id && l.name);
+    })).filter(l => l.id && l.name && l.id !== '0');
 
     const result = { leagues, total: leagues.length };
     cache[cacheKey] = { data: result, lastFetch: now };
@@ -319,14 +424,12 @@ async function fetchLeagues() {
     if (cache[cacheKey]?.data) {
       return cache[cacheKey].data;
     }
-    // Fallback leagues
     return {
       leagues: [
-        { id: '0', name: 'All', localName: 'All' },
         { id: '4186762757372631736', name: 'FIFA World Cup', localName: 'FIFA World Cup' },
         { id: '1247297119346653536', name: 'NBA', localName: 'NBA' },
       ],
-      total: 3,
+      total: 2,
       error: err.message,
     };
   }
@@ -412,7 +515,6 @@ router.post('/test-streams', async (req, res) => {
 
     const results = await Promise.all(
       streams.map(async (s) => {
-        // Resolve HTML wrapper URLs to their actual m3u8
         const resolved = extractStreamUrl(s.url || s.originalUrl || '');
         const result = await testStream(resolved);
         return { ...s, url: resolved, ok: result.ok, ms: result.ms };
@@ -432,17 +534,37 @@ router.post('/test-streams', async (req, res) => {
 });
 
 // ─── GET /api/sports-v2/stream-proxy ────────────────────────────────────────
+// FIX v2: Complete rewrite with proper relative-URL resolution and
+// comprehensive URI attribute rewriting.
 router.get('/stream-proxy', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
 
+  let targetUrl;
+  try {
+    targetUrl = decodeURIComponent(url);
+  } catch {
+    targetUrl = url;
+  }
+
   try {
     const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
     const rangeHeader = req.headers['range'];
+
+    // Build upstream headers — forward Origin/Referer to avoid 403s
     const fetchHeaders = { ...STREAM_HEADERS };
     if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
 
-    const streamResp = await fetch(url, { headers: fetchHeaders });
+    // If client sent an Origin, forward a plausible one for the upstream domain
+    const clientOrigin = req.headers['origin'];
+    if (clientOrigin) {
+      fetchHeaders['Origin'] = clientOrigin;
+    }
+
+    const streamResp = await fetch(targetUrl, {
+      headers: fetchHeaders,
+      redirect: 'follow',
+    });
 
     if (!streamResp.ok && streamResp.status !== 206) {
       return res.status(streamResp.status).send('Stream error');
@@ -461,19 +583,43 @@ router.get('/stream-proxy', async (req, res) => {
       res.setHeader('Content-Range', streamResp.headers.get('content-range'));
     }
 
-    if (url.includes('.m3u8') && !rangeHeader) {
+    // ── M3U8 manifest rewriting ───────────────────────────────────────
+    if (targetUrl.match(/\.m3u8(?:\?|$)/i) && !rangeHeader) {
       const text = await streamResp.text();
-      const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-      const host = `${req.protocol}://${req.get('host')}`;
+      const proxyBase = `${req.protocol}://${req.get('host')}/api/sports-v2/stream-proxy`;
+
+      // Resolve any relative URL against the m3u8's base using the URL constructor
+      const resolveUrl = (href) => {
+        try {
+          return new URL(href, targetUrl).toString();
+        } catch {
+          return href;
+        }
+      };
+
+      const proxyify = (absUrl) => `${proxyBase}?url=${encodeURIComponent(absUrl)}`;
+
       const rewritten = text.split('\n').map(line => {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) return line;
-        const absUrl = trimmed.startsWith('http') ? trimmed : baseUrl + trimmed;
-        return `${host}/api/sports-v2/stream-proxy?url=${encodeURIComponent(absUrl)}`;
+
+        // Pass through comments and empty lines
+        if (!trimmed || trimmed.startsWith('#')) {
+          // But rewrite URI="..." attributes inside tags
+          return line.replace(/URI="([^"]+)"/g, (m0, uri) => {
+            const abs = resolveUrl(uri);
+            return `URI="${proxyify(abs)}"`;
+          });
+        }
+
+        // Media segment or sub-playlist line
+        const absUrl = resolveUrl(trimmed);
+        return proxyify(absUrl);
       }).join('\n');
+
       return res.send(rewritten);
     }
 
+    // ── Binary segment pass-through ───────────────────────────────────
     streamResp.body.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -511,14 +657,11 @@ router.get('/logo-proxy', async (req, res) => {
 });
 
 // ─── GET /api/sports-v2/resolve-stream ──────────────────────────────────────
-// Resolves a stream URL to its actual playable form
 router.get('/resolve-stream', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
 
   const resolved = extractStreamUrl(url);
-
-  // If the original is an HTML page and we extracted a different URL
   const isHtmlWrapper = url !== resolved;
 
   res.json({
@@ -531,7 +674,6 @@ router.get('/resolve-stream', async (req, res) => {
 });
 
 // ─── GET /api/sports-v2/iframe-player ───────────────────────────────────────
-// Returns an HTML page with an iframe player for HTML-only streams
 router.get('/iframe-player', async (req, res) => {
   const { url, title = 'Live Stream' } = req.query;
   if (!url) return res.status(400).send('url required');
@@ -539,13 +681,11 @@ router.get('/iframe-player', async (req, res) => {
   const decodedUrl = decodeURIComponent(url);
   const resolved = extractStreamUrl(decodedUrl);
 
-  // If we can extract a direct m3u8, redirect to it
   if (resolved && resolved.match(/\.m3u8(?:\?|$)/i) && !resolved.includes('.html')) {
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     return res.redirect(`/api/sports-v2/stream-proxy?url=${encodeURIComponent(resolved)}`);
   }
 
-  // Otherwise serve an iframe player
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -568,49 +708,6 @@ router.get('/iframe-player', async (req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.send(html);
-});
-
-// ─── TrustVerse Integration ─────────────────────────────────────────────────
-// Proxies TrustVerse live sports data as a fallback source
-
-const TRUSTVERSE_BASE = 'https://trust-verse-final-17.vercel.app';
-
-async function fetchTrustVerseData() {
-  const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
-  try {
-    // Try to fetch their sports data page
-    const resp = await fetch(`${TRUSTVERSE_BASE}/api/sports-data`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      },
-      timeout: 15000,
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      return data;
-    }
-  } catch (e) {
-    // TrustVerse API not available
-  }
-  return null;
-}
-
-// ─── GET /api/sports-v2/trustverse/matches ──────────────────────────────────
-router.get('/trustverse/matches', async (_req, res) => {
-  try {
-    const data = await fetchTrustVerseData();
-    if (!data) {
-      return res.status(503).json({
-        success: false,
-        error: 'TrustVerse data source temporarily unavailable',
-        matches: [],
-      });
-    }
-    res.json({ success: true, source: 'trustverse', ...data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, matches: [] });
-  }
 });
 
 module.exports = router;
