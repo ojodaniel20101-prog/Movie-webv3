@@ -9,6 +9,9 @@ import {
   Users, Timer, Flag, Smartphone, Monitor, AlertTriangle,
   Video, Film, ChevronRight
 } from 'lucide-react';
+import MatchStatsPanel from '../components/football/MatchStatsPanel';
+import MatchLineups from '../components/football/MatchLineups';
+import MatchEventsTimeline from '../components/football/MatchEventsTimeline';
 import Hls from 'hls.js';
 import MatchStatsOverlay from '../components/football/MatchStatsOverlay';
 import ShareButton from '@/components/share/ShareButton';
@@ -407,13 +410,17 @@ function VideoModal({ title, url, onClose }: { title: string; url: string; onClo
 }
 
 // ─── Component: MatchDetailPanel ─────────────────────────────────────────────
-function MatchDetailPanel({ match, onClose, onPlay, source }: {
+function MatchDetailPanel({ match, onClose, onPlay, source, stats, lineups, events }: {
   match: Match;
   onClose: () => void;
   onPlay: (match: Match) => void;
   source: 'local' | 'english';
+  stats?: any[];
+  lineups?: any;
+  events?: any[];
 }) {
   const [videoModal, setVideoModal] = useState<{ title: string; url: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<'stats' | 'lineups' | 'events'>('stats');
   const canPlay = match.status === 'LIVE' && (match.streams.length > 0 || (match.embedhdStreams && match.embedhdStreams.length > 0));
   const matchShareUrl = `${window.location.origin}/sports?match=${encodeURIComponent(match.id)}&source=${source}`;
 
@@ -622,43 +629,61 @@ function MatchDetailPanel({ match, onClose, onPlay, source }: {
           </div>
         )}
 
-        {/* Full Match Replays */}
-        {(match.replays ?? []).length > 0 && (
-          <div className="px-5 pb-6">
-            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#8899AA' }}>
-                <Video size={12} /> Full Match Replays ({(match.replays ?? []).length})
-              </h4>
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                {(match.replays ?? []).map((r, i) => (
-                  <motion.button
-                    key={r.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => setVideoModal({ title: r.title, url: r.url })}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
-                  >
-                    {r.cover ? (
-                      <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={r.cover} alt="" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
-                          <Play size={14} className="text-white fill-current" />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="w-20 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                        <Video size={16} style={{ color: '#8899AA' }} />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white truncate">{r.title}</p>
-                    </div>
-                    <ChevronRight size={14} style={{ color: '#8899AA' }} className="flex-shrink-0" />
-                  </motion.button>
-                ))}
-              </div>
+        {/* Stats / Lineups / Events Tabs */}
+        {(stats?.length > 0 || lineups || events?.length > 0) && (
+          <div className="px-5 pb-4">
+            {/* Tab bar */}
+            <div className="flex rounded-xl overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              {[
+                { key: 'stats', label: 'Statistics', icon: 'BarChart3' },
+                { key: 'lineups', label: 'Lineups', icon: 'Users' },
+                { key: 'events', label: 'Events', icon: 'Flag' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key as any)}
+                  className="flex-1 py-2.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5"
+                  style={activeTab === tab.key
+                    ? { background: 'rgba(0,212,255,0.15)', color: '#00D4FF', borderBottom: '2px solid #00D4FF' }
+                    : { color: '#8899AA' }
+                  }
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
+
+            {/* Tab content */}
+            {activeTab === 'stats' && stats && stats.length >= 2 && (
+              <MatchStatsPanel
+                stats={{
+                  possession: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Ball Possession')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Ball Possession')?.value) || 0],
+                  shots: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Total Shots')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Total Shots')?.value) || 0],
+                  shotsOnTarget: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Shots on Goal')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Shots on Goal')?.value) || 0],
+                  corners: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Corner Kicks')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Corner Kicks')?.value) || 0],
+                  fouls: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Fouls')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Fouls')?.value) || 0],
+                  yellowCards: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Yellow Cards')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Yellow Cards')?.value) || 0],
+                  redCards: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Red Cards')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Red Cards')?.value) || 0],
+                  offsides: [parseInt(stats[0]?.statistics?.find((s: any) => s.type === 'Offsides')?.value) || 0, parseInt(stats[1]?.statistics?.find((s: any) => s.type === 'Offsides')?.value) || 0],
+                }}
+                homeTeamName={match.homeTeam}
+                awayTeamName={match.awayTeam}
+              />
+            )}
+            {activeTab === 'lineups' && lineups && (
+              <MatchLineups
+                lineups={lineups}
+                homeTeamName={match.homeTeam}
+                awayTeamName={match.awayTeam}
+              />
+            )}
+            {activeTab === 'events' && events && events.length > 0 && (
+              <MatchEventsTimeline
+                events={events}
+                homeTeamName={match.homeTeam}
+                awayTeamName={match.awayTeam}
+              />
+            )}
           </div>
         )}
 
@@ -1803,6 +1828,9 @@ export default function SportsPage() {
   const [source, setSource] = useState<'local' | 'english'>('local');
   const [selectedLeague, setSelectedLeague] = useState<string | null>(null);
   const [detailMatch, setDetailMatch] = useState<Match | null>(null);
+  const [matchStats, setMatchStats] = useState<any[]>([]);
+  const [matchLineups, setMatchLineups] = useState<any>(null);
+  const [matchEvents, setMatchEvents] = useState<any[]>([]);
   const [retryCount, setRetryCount] = useState(0);
 
   const fetchMatches = useCallback(async () => {
@@ -1916,10 +1944,11 @@ export default function SportsPage() {
     if (match.status === 'FINISHED') {
       fetch(`${API_BASE}/api/sports-v2/match/${match.id}`)
         .then(r => r.json())
-        .then(data => {
+        .then(async data => {
+          let enriched: Match;
           if (data.success && data.match) {
             const m = data.match;
-            const enriched: Match = {
+            enriched = {
               ...match,
               replays: (m.replays || []).map((r: any, idx: number) => ({
                 id: r.id || String(idx),
@@ -1937,9 +1966,25 @@ export default function SportsPage() {
                 views: h.views || h.viewCount || '0',
               })),
             };
-            setDetailMatch(enriched);
           } else {
-            setDetailMatch(match);
+            enriched = match;
+          }
+          setDetailMatch(enriched);
+
+          // Fetch highlightly stats/lineups/events
+          if (match.startTime) {
+            const dateISO = new Date(match.startTime).toISOString().split('T')[0];
+            const hlId = await getHighlightlyMatchId(match.homeTeam, match.awayTeam, dateISO);
+            if (hlId) {
+              const [stats, lineups, events] = await Promise.all([
+                getMatchStatistics(hlId),
+                getMatchLineups(hlId),
+                getMatchEvents(hlId),
+              ]);
+              setMatchStats(stats);
+              setMatchLineups(lineups);
+              setMatchEvents(events);
+            }
           }
         })
         .catch(() => setDetailMatch(match));
@@ -1991,6 +2036,9 @@ export default function SportsPage() {
             onClose={() => setDetailMatch(null)}
             onPlay={handlePlay}
             source={source}
+            stats={matchStats}
+            lineups={matchLineups}
+            events={matchEvents}
           />
         )}
       </AnimatePresence>

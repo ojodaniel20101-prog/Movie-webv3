@@ -129,6 +129,75 @@ export async function fetchEvents(matchId: string): Promise<MatchEvent[] | null>
  * Uses demo data as fallback when real API is unavailable.
  * Passes team names to get real data for known matches.
  */
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Highlightly API — Statistics, Lineups, Events, Standings
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export async function getHighlightlyMatchId(home: string, away: string, dateISO: string): Promise<string | null> {
+  try {
+    const url = `/api/highlightly/match-id?date=${encodeURIComponent(dateISO)}&home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.success ? data.id : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getMatchStatistics(matchId: string) {
+  try {
+    const res = await fetch(`/api/highlightly/statistics?matchId=${encodeURIComponent(matchId)}`);
+    const data = await res.json();
+    return data.success ? data.statistics : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getMatchLineups(matchId: string) {
+  try {
+    const res = await fetch(`/api/highlightly/lineups?matchId=${encodeURIComponent(matchId)}`);
+    const data = await res.json();
+    return data.success ? { home: data.homeTeam, away: data.awayTeam } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getMatchEvents(matchId: string) {
+  try {
+    const res = await fetch(`/api/highlightly/events?matchId=${encodeURIComponent(matchId)}`);
+    const data = await res.json();
+    return data.success ? data.events : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getHighlightlyStandings(leagueId: string, season?: string) {
+  try {
+    let url = `/api/highlightly/standings?leagueId=${encodeURIComponent(leagueId)}`;
+    if (season) url += `&season=${encodeURIComponent(season)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.success ? data.standings : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getHighlightlyLeagues() {
+  try {
+    const res = await fetch('/api/highlightly/leagues');
+    const data = await res.json();
+    return data.success ? data.leagues : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchFootballData(
   matchId: string,
   homeTeam?: string,
