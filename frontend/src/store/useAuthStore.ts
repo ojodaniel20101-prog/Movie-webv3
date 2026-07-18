@@ -207,6 +207,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         };
 
         set({ user, profile, isAuthenticated: true, isAdmin });
+        localStorage.removeItem('zentrix_guest_id');
         get().refreshHeartbeat();
 
         const [{ useWatchlistStore }, { useHistoryStore }] = await Promise.all([
@@ -291,6 +292,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
             };
 
             set({ user, profile, isAuthenticated: true, isAdmin });
+        localStorage.removeItem('zentrix_guest_id');
             get().refreshHeartbeat();
 
             // Import stores and set userId BEFORE setting isLoading:false.
