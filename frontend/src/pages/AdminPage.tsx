@@ -262,7 +262,7 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
                   { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-primary-400', bg: 'bg-primary-500/10' },
-                  { label: 'Online Now', value: onlineUsers, icon: Radio, color: 'text-green-400', bg: 'bg-green-500/10', onClick: () => { setFilterOnline(true); setActiveTab('users'); } },
+                  { label: 'Online Now', value: onlineUsers + guestsOnline, icon: Radio, color: 'text-green-400', bg: 'bg-green-500/10', onClick: () => { setFilterOnline(true); setActiveTab('users'); } },
                   { label: 'Admins', value: adminUsers, icon: Shield, color: 'text-amber-400', bg: 'bg-amber-500/10' },
                   { label: 'Banned', value: bannedUsers, icon: Ban, color: 'text-red-400', bg: 'bg-red-500/10' },
                   { label: 'Open Tickets', value: openTickets, icon: MessageCircle, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
@@ -351,6 +351,13 @@ export default function AdminPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
             >
+              {/* Filter banner */}
+              {filterOnline && (
+                <div className="flex items-center justify-between mb-3 px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
+                  <span className="text-xs text-green-400 font-medium">🟢 Showing online users only ({onlineUsers})</span>
+                  <button onClick={() => setFilterOnline(false)} className="text-xs text-gray-400 hover:text-white">Show all</button>
+                </div>
+              )}
               {/* Search */}
               <div className="relative mb-4">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
