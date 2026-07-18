@@ -253,7 +253,7 @@ export default function AdminPage() {
                   { label: 'Admins', value: adminUsers, icon: Shield, color: 'text-amber-400', bg: 'bg-amber-500/10' },
                   { label: 'Banned', value: bannedUsers, icon: Ban, color: 'text-red-400', bg: 'bg-red-500/10' },
                   { label: 'Open Tickets', value: openTickets, icon: MessageCircle, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-                ].map(({ label, value, icon: Icon, color, bg }) => (
+                ].map(({ label, value, icon: Icon, color, bg, onClick }) => (
                   <div key={label} onClick={onClick} className={`rounded-2xl p-4 border border-white/[0.07] ${onClick ? 'cursor-pointer hover:border-green-400/40 transition-colors' : ''}`} style={{ background: 'rgba(10,12,24,0.8)', backdropFilter: 'blur(16px)' }}>
                     <Icon size={18} className={`${color} mb-2`} />
                     <p className="font-display font-black text-2xl text-white">{value}</p>
