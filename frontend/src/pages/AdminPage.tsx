@@ -185,7 +185,7 @@ export default function AdminPage() {
   const isReallyOnline = (u: any) => u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000;
   const onlineUsers = users.filter(isReallyOnline).length;
   const [filterOnline, setFilterOnline] = useState(false);
-  const displayedUsers = filterOnline ? users.filter(isReallyOnline) : users;
+  const displayedUsers = filterOnline ? users.filter(u => isReallyOnline(u)) : users;
   const bannedUsers = users.filter(u => u.is_banned).length;
   const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
   const adminUsers = users.filter(u => u.role === 'admin').length;
@@ -262,7 +262,7 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
                   { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-primary-400', bg: 'bg-primary-500/10' },
-                  { label: 'Online Now', value: onlineUsers, icon: Radio, color: 'text-green-400', bg: 'bg-green-500/10', onClick: () => { setFilterOnline(f => !f); setActiveTab('users'); } },
+                  { label: 'Online Now', value: onlineUsers, icon: Radio, color: 'text-green-400', bg: 'bg-green-500/10', onClick: () => { setFilterOnline(true); setActiveTab('users'); } },
                   { label: 'Admins', value: adminUsers, icon: Shield, color: 'text-amber-400', bg: 'bg-amber-500/10' },
                   { label: 'Banned', value: bannedUsers, icon: Ban, color: 'text-red-400', bg: 'bg-red-500/10' },
                   { label: 'Open Tickets', value: openTickets, icon: MessageCircle, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
