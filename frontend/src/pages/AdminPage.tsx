@@ -470,15 +470,33 @@ export default function AdminPage() {
                     <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">● Online</span>
                   </div>
                   {selectedGuest?.id === g.id && g.activities && g.activities.length > 0 && (
-                    <div className="mt-3 border-t border-white/[0.07] pt-3 space-y-1">
-                      <p className="text-xs text-gray-400 mb-2">Session Activity</p>
-                      {g.activities.slice(-10).reverse().map((a: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-500">{a.type === 'page_enter' ? '→' : '←'}</span>
-                          <span className="text-white">{a.page}</span>
-                          {a.timeSpent && <span className="text-gray-500 ml-auto">{a.timeSpent}s</span>}
-                        </div>
-                      ))}
+                    <div className="mt-3 border-t border-white/[0.07] pt-3 space-y-2">
+                      <p className="text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wider">Session Timeline</p>
+                      {g.activities.filter((a: any) => a.type === 'page_enter').slice(-10).reverse().map((a: any, i: number) => {
+                        const pageNames: Record<string, { name: string; emoji: string }> = {
+                          '/': { name: 'Home', emoji: '🏠' },
+                          '/sports': { name: 'Sports', emoji: '⚽' },
+                          '/live': { name: 'Live TV', emoji: '📺' },
+                          '/anime': { name: 'Anime', emoji: '🍥' },
+                          '/search': { name: 'Search', emoji: '🔍' },
+                          '/trailers': { name: 'Trailers', emoji: '🎞' },
+                          '/watchlist': { name: 'Watchlist', emoji: '📋' },
+                          '/profile': { name: 'Profile', emoji: '👤' },
+                          '/wrestling': { name: 'Wrestling', emoji: '🤼' },
+                        };
+                        const leave = g.activities.find((la: any) => la.type === 'page_leave' && la.page === a.page);
+                        const info = pageNames[a.page] || { name: a.page.replace('/', '').replace('-', ' ') || 'Home', emoji: '📄' };
+                        return (
+                          <div key={i} className="flex items-center gap-3 text-xs bg-white/[0.03] rounded-xl px-3 py-2">
+                            <span className="text-lg">{info.emoji}</span>
+                            <div className="flex-1">
+                              <p className="text-white font-medium">{info.name}</p>
+                              {leave?.timeSpent && <p className="text-gray-500">{leave.timeSpent < 60 ? `${leave.timeSpent}s` : `${Math.floor(leave.timeSpent/60)}m ${leave.timeSpent%60}s`}</p>}
+                            </div>
+                            {i === 0 && <span className="text-green-400 text-[10px] font-semibold">NOW</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
