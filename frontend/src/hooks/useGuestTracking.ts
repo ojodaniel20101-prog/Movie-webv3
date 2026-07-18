@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -13,38 +13,77 @@ function getGuestId(): string {
   return id;
 }
 
+function getDeviceType(): string {
+  return /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+}
+
 export function useGuestTracking() {
   const location = useLocation();
   const { user } = useAuthStore();
+  const pageStartTime = useRef(Date.now());
+  const currentPage = useRef(location.pathname);
 
   useEffect(() => {
     if (user) return;
     const guestId = getGuestId();
+    const device = getDeviceType();
 
-    const ping = () => {
+    const ping = (page = location.pathname) => {
       fetch(`${BACKEND}/api/admin/guest-heartbeat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, page: location.pathname }),
+        body: JSON.stringify({ guestId, page, device }),
+      }).catch(() => {});
+    };
+
+    const trackPageLeave = () => {
+      const timeSpent = Math.floor((Date.now() - pageStartTime.current) / 1000);
+      fetch(`${BACKEND}/api/admin/guest-activity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId,
+          type: 'page_leave',
+          page: currentPage.current,
+          timeSpent,
+          device,
+        }),
+      }).catch(() => {});
+    };
+
+    const trackPageEnter = () => {
+      pageStartTime.current = Date.now();
+      currentPage.current = location.pathname;
+      fetch(`${BACKEND}/api/admin/guest-activity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId,
+          type: 'page_enter',
+          page: location.pathname,
+          device,
+          timestamp: Date.now(),
+        }),
       }).catch(() => {});
     };
 
     const remove = () => {
-      navigator.sendBeacon(`${BACKEND}/api/admin/guest-offline`, JSON.stringify({ guestId }));
+      trackPageLeave();
+      navigator.sendBeacon(
+        `${BACKEND}/api/admin/guest-offline`,
+        JSON.stringify({ guestId })
+      );
     };
 
+    trackPageEnter();
     ping();
     const interval = setInterval(ping, 30000);
     window.addEventListener('beforeunload', remove);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') remove();
-      else ping();
-    });
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('beforeunload', remove);
-      remove();
+      trackPageLeave();
     };
   }, [location.pathname, user]);
 }
