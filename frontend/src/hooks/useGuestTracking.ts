@@ -24,7 +24,19 @@ export function useGuestTracking() {
   const currentPage = useRef(location.pathname);
 
   useEffect(() => {
-    if (user) return;
+    // If signed in remove guest session and stop tracking
+    if (user) {
+      const guestId = localStorage.getItem('zentrix_guest_id');
+      if (guestId) {
+        navigator.sendBeacon(
+          `${BACKEND}/api/admin/guest-offline`,
+          JSON.stringify({ guestId })
+        );
+        localStorage.removeItem('zentrix_guest_id');
+      }
+      return;
+    }
+
     const guestId = getGuestId();
     const device = getDeviceType();
 
