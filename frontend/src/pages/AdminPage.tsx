@@ -172,7 +172,7 @@ export default function AdminPage() {
   const totalUsers = users.length;
   const isReallyOnline = (u: any) => u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000;
   const onlineUsers = users.filter(isReallyOnline).length;
-  const [filterOnline, setFilterOnline] = React.useState(false);
+  const [filterOnline, setFilterOnline] = useState(false);
   const displayedUsers = filterOnline ? users.filter(isReallyOnline) : users;
   const bannedUsers = users.filter(u => u.is_banned).length;
   const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
