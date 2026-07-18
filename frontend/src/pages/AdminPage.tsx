@@ -353,9 +353,26 @@ export default function AdminPage() {
             >
               {/* Filter banner */}
               {filterOnline && (
-                <div className="flex items-center justify-between mb-3 px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
-                  <span className="text-xs text-green-400 font-medium">🟢 Showing online users only ({onlineUsers})</span>
-                  <button onClick={() => setFilterOnline(false)} className="text-xs text-gray-400 hover:text-white">Show all</button>
+                <div className="mb-3 space-y-2">
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
+                    <span className="text-xs text-green-400 font-medium">🟢 Showing online users only ({onlineUsers})</span>
+                    <button onClick={() => setFilterOnline(false)} className="text-xs text-gray-400 hover:text-white">Show all</button>
+                  </div>
+                  {guests.length > 0 && (
+                    <div className="px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                      <p className="text-xs text-blue-400 font-medium mb-2">👥 {guests.length} Guest{guests.length !== 1 ? 's' : ''} Online</p>
+                      {guests.map((g: any) => (
+                        <div key={g.id} className="flex items-center gap-2 py-1">
+                          <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-[10px] font-bold">G</div>
+                          <div>
+                            <p className="text-xs text-white">{g.id}</p>
+                            <p className="text-[10px] text-gray-500">{g.device} · {g.page}</p>
+                          </div>
+                          <span className="ml-auto text-[10px] text-blue-400">● Online</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {/* Search */}
