@@ -78,6 +78,7 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<SupportChat[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingTickets, setLoadingTickets] = useState(true);
+  const [guestsOnline, setGuestsOnline] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
