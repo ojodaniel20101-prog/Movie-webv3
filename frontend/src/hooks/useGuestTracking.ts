@@ -18,7 +18,7 @@ export function useGuestTracking() {
   const { user } = useAuthStore();
 
   useEffect(() => {
-    if (user) return; // signed in users use heartbeat in App.tsx
+    if (user) return;
     const guestId = getGuestId();
 
     const ping = () => {
@@ -29,8 +29,22 @@ export function useGuestTracking() {
       }).catch(() => {});
     };
 
+    const remove = () => {
+      navigator.sendBeacon(`${BACKEND}/api/admin/guest-offline`, JSON.stringify({ guestId }));
+    };
+
     ping();
     const interval = setInterval(ping, 30000);
-    return () => clearInterval(interval);
+    window.addEventListener('beforeunload', remove);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') remove();
+      else ping();
+    });
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', remove);
+      remove();
+    };
   }, [location.pathname, user]);
 }

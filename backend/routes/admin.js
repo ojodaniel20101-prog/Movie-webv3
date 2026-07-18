@@ -27,3 +27,15 @@ router.get('/guests-online', (req, res) => {
 });
 
 module.exports = router;
+
+router.post('/guest-offline', (req, res) => {
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', () => {
+    try {
+      const { guestId } = JSON.parse(body);
+      if (guestId) guestSessions.delete(guestId);
+    } catch(e) {}
+    res.status(200).end();
+  });
+});
