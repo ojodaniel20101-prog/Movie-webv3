@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 
 import Layout from '@/components/layout/Layout';
 import { useAuthStore } from '@/store/useAuthStore';
+import { setUserOnline, setUserOffline } from '@/lib/supabase';
 import { useLiveTvStore } from '@/store/useLiveTvStore';
 import { useLivePreconnect } from '@/hooks/useLivePreconnect';
 
@@ -184,6 +185,26 @@ function AppInner() {
   useEffect(() => {
     const unsubscribe = initAuth();
     return () => unsubscribe();
+  }, []);
+
+  // Heartbeat — ping every 30s to keep is_online accurate
+  useEffect(() => {
+    const { user } = useAuthStore.getState();
+    if (!user) return;
+    const uid = user.id;
+    setUserOnline(uid);
+    const interval = setInterval(() => setUserOnline(uid), 30000);
+    const handleOffline = () => setUserOffline(uid);
+    window.addEventListener('beforeunload', handleOffline);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') setUserOffline(uid);
+      else setUserOnline(uid);
+    });
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleOffline);
+      setUserOffline(uid);
+    };
   }, []);
 
   return (

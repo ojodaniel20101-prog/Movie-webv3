@@ -170,7 +170,7 @@ export default function AdminPage() {
 
   // ─── Derived data ──────────────────────────────────────────────────────────
   const totalUsers = users.length;
-  const onlineUsers = users.filter(u => u.is_online).length;
+  const onlineUsers = users.filter(u => u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000).length;
   const bannedUsers = users.filter(u => u.is_banned).length;
   const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
   const adminUsers = users.filter(u => u.role === 'admin').length;
