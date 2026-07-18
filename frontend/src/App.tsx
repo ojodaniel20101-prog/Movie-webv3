@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { setUserOnline, setUserOffline } from '@/lib/supabase';
 import { useLiveTvStore } from '@/store/useLiveTvStore';
 import { useLivePreconnect } from '@/hooks/useLivePreconnect';
+import { useGuestTracking } from '@/hooks/useGuestTracking';
 
 
 // Lazy pages
@@ -96,6 +97,7 @@ const queryClient = new QueryClient({
 
 function AppRoutes() {
   const { isLoading, isAuthenticated } = useAuthStore();
+  useGuestTracking();
   const location = useLocation();
   const navigate  = useNavigate();
   const firstRun = useRef(true);
