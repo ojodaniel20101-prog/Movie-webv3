@@ -93,6 +93,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!isAdmin) return;
     fetchUsers();
+    fetchTickets();
     const fetchGuests = () => {
       fetch('/api/admin/guests-online')
         .then(r => r.json())
@@ -102,7 +103,6 @@ export default function AdminPage() {
     fetchGuests();
     const guestInterval = setInterval(fetchGuests, 30000);
     return () => clearInterval(guestInterval);
-    fetchTickets();
   }, [isAdmin]);
 
   async function fetchUsers() {
