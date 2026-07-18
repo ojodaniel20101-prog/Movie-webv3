@@ -102,31 +102,64 @@ export default function DownloadSection({
           if (!srcData.success) throw new Error('No download URL found');
           setDownloadProgress((prev) => ({ ...prev, [ep.id]: 90 }));
 
-          // 4. Trigger browser download
+          // 4. Fetch blob and save to IndexedDB for offline playback
           const downloadUrl = srcData.downloadUrl || srcData.streamUrl;
           if (downloadUrl) {
-            // Open download URL in new tab (handles CORS via redirect)
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.target = '_blank';
-            a.download = `${title.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')}_EP${String(ep.episode_number).padStart(2, '0')}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            setDownloadProgress((prev) => ({ ...prev, [ep.id]: 70 }));
+            try {
+              const blobRes = await fetch(downloadUrl);
+              const blob = await blobRes.blob();
+              const blobUrl = URL.createObjectURL(blob);
+
+              // Also trigger device download
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = `${title.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')}_EP${String(ep.episode_number).padStart(2, '0')}.mp4`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+
+              // Save blob as base64 to IndexedDB for offline playback
+              const reader = new FileReader();
+              reader.readAsDataURL(blob);
+              reader.onloadend = async () => {
+                await addDownload({
+                  id: `${contentId}-${ep.id}`,
+                  contentId,
+                  contentType,
+                  title,
+                  episodeNumber: ep.episode_number,
+                  seasonNumber: ep.season_number,
+                  thumbnail: '',
+                  fileUrl: reader.result as string,
+                  downloadedAt: Date.now(),
+                  size: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
+                });
+              };
+            } catch (blobErr) {
+              // Fallback to direct download if blob fetch fails
+              const a = document.createElement('a');
+              a.href = downloadUrl;
+              a.target = '_blank';
+              a.download = `${title.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')}_EP${String(ep.episode_number).padStart(2, '0')}.mp4`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              await addDownload({
+                id: `${contentId}-${ep.id}`,
+                contentId,
+                contentType,
+                title,
+                episodeNumber: ep.episode_number,
+                seasonNumber: ep.season_number,
+                thumbnail: '',
+                fileUrl: downloadUrl,
+                downloadedAt: Date.now(),
+              });
+            }
           }
           setDownloadProgress((prev) => ({ ...prev, [ep.id]: 100 }));
           setCompletedDownloads((prev) => new Set([...prev, ep.id]));
-          await addDownload({
-            id: `${contentId}-${ep.id}`,
-            contentId,
-            contentType,
-            title,
-            episodeNumber: ep.episode_number,
-            seasonNumber: ep.season_number,
-            thumbnail: `https://image.tmdb.org/t/p/w300${contentId}` || '',
-            fileUrl: downloadUrl || '',
-            downloadedAt: Date.now(),
-          });
         } else {
           // Non-anime: simulate for now
           for (let i = 0; i <= 100; i += 10) {
