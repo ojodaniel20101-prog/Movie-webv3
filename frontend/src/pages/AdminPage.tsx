@@ -279,8 +279,8 @@ export default function AdminPage() {
                           <p className="text-sm text-white truncate">{u.display_name}</p>
                           <p className="text-xs text-gray-500 truncate">{u.email}</p>
                         </div>
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${u.is_online ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-gray-500'}`}>
-                          {u.is_online ? 'Online' : timeAgo(u.last_seen)}
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000 ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-gray-500'}`}>
+                          {u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000 ? 'Online' : timeAgo(u.last_seen)}
                         </span>
                       </div>
                     ))}
@@ -390,8 +390,8 @@ export default function AdminPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${u.is_online ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-gray-500'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${u.is_online ? 'bg-green-400' : 'bg-gray-600'}`} />
-                                {u.is_online ? 'Online' : 'Offline'}
+                                <span className={`w-1.5 h-1.5 rounded-full ${u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000 ? 'bg-green-400' : 'bg-gray-600'}`} />
+                                {u.is_online && new Date().getTime() - new Date(u.last_seen).getTime() < 60000 ? 'Online' : 'Offline'}
                               </span>
                             </td>
                             <td className="px-4 py-3">
