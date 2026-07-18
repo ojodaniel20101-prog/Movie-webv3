@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { setUserOnline, setUserOffline } from '@/lib/supabase';
 import { useLiveTvStore } from '@/store/useLiveTvStore';
 import { useLivePreconnect } from '@/hooks/useLivePreconnect';
+import { useGuestTracking } from '@/hooks/useGuestTracking';
 
 // Lazy pages
 const HomePage                  = lazy(() => import('@/pages/HomePage'));
@@ -181,6 +182,7 @@ function AppInner() {
   // Background pre-warm all Live TV stream connections so clicking a
   // channel plays instantly instead of showing a spinner.
   useLivePreconnect();
+  useGuestTracking();
 
   useEffect(() => {
     const unsubscribe = initAuth();
