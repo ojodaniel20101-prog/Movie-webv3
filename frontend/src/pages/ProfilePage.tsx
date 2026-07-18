@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  LogOut, Bookmark, Heart, Clock,
+  LogOut, Bookmark, Heart, Clock, Download,
   ChevronRight, Shield, Bell, Info,
   Edit2, Check, Film, Tv, Sparkles, MapPin,
   Camera, X, Upload, LayoutDashboard,
@@ -13,6 +13,7 @@ import InstallAppButton from '@/components/pwa/InstallAppButton';
 import { useAuthStore } from '@/store/useAuthStore';
 import { checkDisplayNameAvailable } from '@/lib/supabase';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
+import { useDownloadStore } from '@/store/useDownloadStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import toast from 'react-hot-toast';
 
@@ -29,6 +30,8 @@ export default function ProfilePage() {
     logout, updateProfile, uploadProfilePhoto, uploadProgress,
   } = useAuthStore();
   const { items: watchlist, favorites } = useWatchlistStore();
+  const { downloads, loadDownloads } = useDownloadStore();
+  useEffect(() => { loadDownloads(); }, []);
   const { items: history }              = useHistoryStore();
 
   const [editingName,  setEditingName]  = useState(false);
@@ -132,6 +135,7 @@ export default function ProfilePage() {
   };
 
   const stats = [
+    { label: 'Downloads', value: downloads.length, icon: Download, href: '/downloads', color: 'text-cyan-400'  },
     { label: 'Watchlist', value: watchlist.length, icon: Bookmark, href: '/watchlist', color: 'text-primary-400'  },
     { label: 'Favorites', value: favorites.length, icon: Heart,    href: '/watchlist', color: 'text-accent-pink'  },
     { label: 'Watched',   value: history.length,   icon: Clock,    href: '/watchlist', color: 'text-accent-teal'  },
