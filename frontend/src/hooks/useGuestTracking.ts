@@ -19,13 +19,13 @@ function getDeviceType(): string {
 
 export function useGuestTracking() {
   const location = useLocation();
-  const { user } = useAuthStore();
+  const { user, isAuthenticated, isLoading } = useAuthStore();
   const pageStartTime = useRef(Date.now());
   const currentPage = useRef(location.pathname);
 
   useEffect(() => {
     // If signed in remove guest session and stop tracking
-    if (user) {
+    if (user || isAuthenticated || isLoading) {
       const guestId = localStorage.getItem('zentrix_guest_id');
       if (guestId) {
         navigator.sendBeacon(
