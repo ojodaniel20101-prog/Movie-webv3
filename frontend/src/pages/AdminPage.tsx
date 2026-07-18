@@ -190,7 +190,7 @@ export default function AdminPage() {
   const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
   const adminUsers = users.filter(u => u.role === 'admin').length;
 
-  const filteredUsers = users.filter(u =>
+  const filteredUsers = displayedUsers.filter(u =>
     u.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
