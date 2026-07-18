@@ -28,6 +28,7 @@ const LiveTVPage                = lazy(() => import('@/pages/LiveTVPage'));
 const AnimePage                 = lazy(() => import('@/pages/AnimePage'));
 const SportsPage                = lazy(() => import('@/pages/SportsPage'));
 const WrestlingPage             = lazy(() => import('@/pages/WrestlingPage'));
+const DownloadsPage             = lazy(() => import('@/pages/DownloadsPage'));
 const NotificationSettingsPage  = lazy(() => import('@/pages/NotificationSettingsPage'));
 
 // Lazy components — hls.js is ~150KB+ and only needed once a channel
@@ -166,6 +167,7 @@ function AppRoutes() {
                 <Route path="/anime"               element={<AnimePage />} />
                 <Route path="/sports"              element={<SportsPage />} />
                 <Route path="/wrestling"           element={<WrestlingPage />} />
+                <Route path="/downloads"          element={<DownloadsPage />} />
                 <Route path="*"                    element={<NotFoundPage />} />
               </Routes>
             </Layout>

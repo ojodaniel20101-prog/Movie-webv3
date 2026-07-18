@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDownloadStore } from '@/store/useDownloadStore';
 import { motion } from 'framer-motion';
 import { Download, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -24,6 +25,7 @@ export default function DownloadSection({
   episodes,
   animeId,
 }: DownloadSectionProps) {
+  const { addDownload } = useDownloadStore();
   const [selectedEpisodes, setSelectedEpisodes] = useState<Set<number>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<Record<number, number>>({});
@@ -114,6 +116,17 @@ export default function DownloadSection({
           }
           setDownloadProgress((prev) => ({ ...prev, [ep.id]: 100 }));
           setCompletedDownloads((prev) => new Set([...prev, ep.id]));
+          await addDownload({
+            id: `${contentId}-${ep.id}`,
+            contentId,
+            contentType,
+            title,
+            episodeNumber: ep.episode_number,
+            seasonNumber: ep.season_number,
+            thumbnail: `https://image.tmdb.org/t/p/w300${contentId}` || '',
+            fileUrl: downloadUrl || '',
+            downloadedAt: Date.now(),
+          });
         } else {
           // Non-anime: simulate for now
           for (let i = 0; i <= 100; i += 10) {
