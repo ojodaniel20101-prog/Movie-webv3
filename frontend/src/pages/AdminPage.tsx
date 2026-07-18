@@ -39,7 +39,7 @@ interface SupportChat {
   profiles?: { display_name: string; email: string } | null;
 }
 
-type Tab = 'overview' | 'users' | 'tickets';
+type Tab = 'overview' | 'users' | 'tickets' | 'guests';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatDate(iso: string | null) {
@@ -79,6 +79,8 @@ export default function AdminPage() {
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [guestsOnline, setGuestsOnline] = useState(0);
+  const [guests, setGuests] = useState<any[]>([]);
+  const [selectedGuest, setSelectedGuest] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
@@ -98,7 +100,7 @@ export default function AdminPage() {
     const fetchGuests = () => {
       fetch('/api/admin/guests-online')
         .then(r => r.json())
-        .then(d => setGuestsOnline(d.count || 0))
+        .then(d => { setGuestsOnline(d.count || 0); setGuests(d.guests || []); })
         .catch(() => {});
     };
     fetchGuests();
@@ -228,6 +230,7 @@ export default function AdminPage() {
             { key: 'overview', label: 'Overview', icon: LayoutDashboard },
             { key: 'users', label: 'Users', icon: Users },
             { key: 'tickets', label: 'Support Tickets', icon: MessageCircle },
+                { key: 'guests', label: 'Guests', icon: Radio },
           ] as const).map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -259,11 +262,11 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
                   { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-primary-400', bg: 'bg-primary-500/10' },
-                  { label: 'Online Now', value: onlineUsers, icon: Radio, color: 'text-green-400', bg: 'bg-green-500/10', onClick: () => setFilterOnline(f => !f) },
+                  { label: 'Online Now', value: onlineUsers, icon: Radio, color: 'text-green-400', bg: 'bg-green-500/10', onClick: () => { setFilterOnline(f => !f); setActiveTab('users'); } },
                   { label: 'Admins', value: adminUsers, icon: Shield, color: 'text-amber-400', bg: 'bg-amber-500/10' },
                   { label: 'Banned', value: bannedUsers, icon: Ban, color: 'text-red-400', bg: 'bg-red-500/10' },
                   { label: 'Open Tickets', value: openTickets, icon: MessageCircle, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-                  { label: 'Guests Online', value: guestsOnline, icon: Radio, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                  { label: 'Guests Online', value: guestsOnline, icon: Radio, color: 'text-blue-400', bg: 'bg-blue-500/10', onClick: () => setActiveTab('guests') },
                 ].map(({ label, value, icon: Icon, color, bg, onClick }) => (
                   <div key={label} onClick={onClick} className={`rounded-2xl p-4 border border-white/[0.07] ${onClick ? 'cursor-pointer hover:border-green-400/40 transition-colors' : ''}`} style={{ background: 'rgba(10,12,24,0.8)', backdropFilter: 'blur(16px)' }}>
                     <Icon size={18} className={`${color} mb-2`} />
@@ -441,6 +444,45 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+            </motion.div>
+          )}
+
+
+          {/* GUESTS TAB */}
+          {activeTab === 'guests' && (
+            <motion.div key="guests" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+              <p className="text-xs text-gray-500 px-1">{guests.length} guest{guests.length !== 1 ? 's' : ''} online now</p>
+              {guests.length === 0 && (
+                <div className="text-center py-12 text-gray-500 text-sm">No guests online right now</div>
+              )}
+              {guests.map((g: any) => (
+                <div key={g.id} onClick={() => setSelectedGuest(selectedGuest?.id === g.id ? null : g)}
+                  className="rounded-2xl p-4 border border-white/[0.07] cursor-pointer hover:border-blue-400/40 transition-colors"
+                  style={{ background: 'rgba(10,12,24,0.8)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-xs font-bold">G</div>
+                      <div>
+                        <p className="text-sm text-white font-medium">{g.id}</p>
+                        <p className="text-xs text-gray-500">{g.device || 'unknown'} · on {g.page}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">● Online</span>
+                  </div>
+                  {selectedGuest?.id === g.id && g.activities && g.activities.length > 0 && (
+                    <div className="mt-3 border-t border-white/[0.07] pt-3 space-y-1">
+                      <p className="text-xs text-gray-400 mb-2">Session Activity</p>
+                      {g.activities.slice(-10).reverse().map((a: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className="text-gray-500">{a.type === 'page_enter' ? '→' : '←'}</span>
+                          <span className="text-white">{a.page}</span>
+                          {a.timeSpent && <span className="text-gray-500 ml-auto">{a.timeSpent}s</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </motion.div>
           )}
 
