@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const VPS_PROXY = 'http://13.49.175.49:5001'\;
+const VPS_PROXY = 'http://13.49.175.49:5001';
 
 async function proxyFetch(url) {
   const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
