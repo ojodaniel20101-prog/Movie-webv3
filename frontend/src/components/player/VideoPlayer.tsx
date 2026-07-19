@@ -424,7 +424,7 @@ export default function VideoPlayer({
       const srcData = await srcRes.json();
       if (!srcData.success || !srcData.streamUrl) throw new Error('No stream found');
 
-      setAhUrl(srcData.streamUrl);
+      setAhUrl('/api/anime/python/proxy-stream?url=' + encodeURIComponent(srcData.streamUrl));
       setAhDownloadUrl(srcData.downloadUrl || null);
       setAhAnimeId(animeId);
       setAhEpId(ep.ep_id || null);
