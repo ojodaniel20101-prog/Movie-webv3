@@ -75,16 +75,17 @@ router.get('/source', async (req, res) => {
 
     // Get video URL from Python service
     const videoResp = await fetch(
-      `${ANIME_SERVICE}/video?id=${encodeURIComponent(finalAnimeId)}&ep=${episode}&ep_id=${encodeURIComponent(finalEpId)}&mode=stream`
+      `${ANIME_SERVICE}/source?anime_id=${encodeURIComponent(finalAnimeId)}&episode=${episode}&ep_id=${encodeURIComponent(finalEpId)}`
     );
     const videoData = await videoResp.json();
 
-    if (!videoData.success || !videoData.video_url) {
+    const rawStream = videoData.stream_url || videoData.video_url || videoData.streamUrl || null;
+
+    if (!rawStream) {
       return res.json({ success: false, error: 'No video source found' });
     }
 
-    const rawStream   = videoData.video_url;
-    const rawDownload = rawStream.includes('&') ? rawStream.split('&')[0] + '&d' : rawStream + '&d';
+    const rawDownload = videoData.download_url || videoData.downloadUrl || rawStream;
 
     res.json({
       success:     true,
