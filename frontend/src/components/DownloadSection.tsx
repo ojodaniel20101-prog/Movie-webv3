@@ -107,7 +107,8 @@ export default function DownloadSection({
           if (downloadUrl) {
             setDownloadProgress((prev) => ({ ...prev, [ep.id]: 70 }));
             try {
-              const blobRes = await fetch(downloadUrl);
+              const proxyUrl = '/api/anime/stream?url=' + encodeURIComponent(downloadUrl);
+              const blobRes = await fetch(proxyUrl);
               const blob = await blobRes.blob();
               const blobUrl = URL.createObjectURL(blob);
 
