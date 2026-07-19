@@ -69,8 +69,8 @@ export default function ContentCard({
     }
   };
 
-  const cardW = wide ? 160 : 100;
-  const cardH = wide ? 96 : 150;
+  const cardW = wide ? 180 : 110;
+  const cardH = wide ? 108 : 165;
 
   return (
     <motion.div
@@ -111,15 +111,21 @@ export default function ContentCard({
           <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
           {/* ── Top badges ── */}
-          <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
-            <span className={badgeClass[type]}>{typeLabel}</span>
-            {rank && rank <= 10 && (
+          {rank && rank <= 10 && (
+            <div className="absolute top-2 left-2">
               <span className="text-2xs font-black text-white/70 leading-none"
                 style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
                 #{rank}
               </span>
-            )}
-          </div>
+            </div>
+          )}
+          {rating > 0 && (
+            <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)' }}>
+              <Star size={8} className="text-yellow-400 fill-yellow-400" />
+              <span className="text-2xs font-bold text-white">{rating.toFixed(1)}</span>
+            </div>
+          )}
 
           {/* ── Watchlist btn ── */}
           <motion.button
@@ -153,28 +159,18 @@ export default function ContentCard({
             </motion.div>
           </div>
 
-          {/* ── Bottom info ── */}
-          <div className="absolute bottom-0 inset-x-0 p-2 translate-y-full group-hover:translate-y-0
-                          transition-transform duration-250 ease-smooth z-10"
-            style={{ background: 'linear-gradient(to top, rgba(2,2,8,0.98), rgba(2,2,8,0.7) 70%, transparent)' }}>
-            {rating > 0 && (
-              <div className="flex items-center gap-1 mb-0.5">
-                <Star size={9} className="text-yellow-400 fill-yellow-400" />
-                <span className="text-2xs font-bold text-white">{rating.toFixed(1)}</span>
-                {releaseYear && <span className="text-2xs text-gray-500">· {releaseYear}</span>}
-              </div>
-            )}
-            <p className="text-2xs text-white/80 font-medium leading-tight line-clamp-2">{title}</p>
-          </div>
+          {/* ── Bottom gradient ── */}
+          <div className="absolute bottom-0 inset-x-0 h-16"
+            style={{ background: 'linear-gradient(to top, rgba(2,2,8,0.95), transparent)' }} />
         </div>
 
         {/* ── Title below card ── */}
-        <div className="mt-2 px-0.5">
-          <p className="text-xs font-medium text-gray-300 truncate group-hover:text-white transition-colors duration-200 leading-tight">
+        <div className="mt-1.5 px-0.5">
+          <p className="text-xs font-semibold text-white/90 truncate leading-tight">
             {title}
           </p>
           {releaseYear && (
-            <p className="text-2xs text-gray-600 mt-0.5">{releaseYear}</p>
+            <p className="text-2xs text-gray-500 mt-0.5">{releaseYear}</p>
           )}
         </div>
       </Link>
