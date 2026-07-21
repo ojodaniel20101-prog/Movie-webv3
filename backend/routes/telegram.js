@@ -1,5 +1,5 @@
 const express = require('express');
-const axios = require('axios');
+
 const router = express.Router();
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -10,8 +10,13 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 async function tgCall(method, payload = {}) {
   try {
-    const { data } = await axios.post(`${TELEGRAM_API}/${method}`, payload, { timeout: 15000 });
-    return data;
+    const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+    const res = await fetch(`${TELEGRAM_API}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
   } catch (err) {
     console.error(`Telegram API failed (${method}):`, err.message);
     return { ok: false };
@@ -73,7 +78,9 @@ async function handleStart(chatId, user) {
 
 async function handleMatches(chatId) {
   try {
-    const { data } = await axios.get(`${API_BASE}/sports-v2/matches?leagueId=0`, { timeout: 10000 });
+    const fetch2 = (...args) => import('node-fetch').then(m => m.default(...args));
+    const r = await fetch2(`${API_BASE}/sports-v2/matches?leagueId=0`);
+    const data = await r.json();
     const matches = data.data?.list || [];
     const live = matches.filter(m => m.status === 'LIVE').slice(0, 5);
     const upcoming = matches.filter(m => m.status === 'UPCOMING').slice(0, 5);
