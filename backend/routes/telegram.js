@@ -3,9 +3,9 @@ const axios = require('axios');
 const router = express.Router();
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBHOOK_URL = 'https://zen-strean.name.ng/api/telegram/webhook'\;
+const WEBHOOK_URL = 'https://zen-strean.name.ng/api/telegram/webhook';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'zentrix_webhook_secret';
-const API_BASE = 'https://zen-strean.name.ng/api'\;
+const API_BASE = 'https://zen-strean.name.ng/api';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 async function tgCall(method, payload = {}) {
